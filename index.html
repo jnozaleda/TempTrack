@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TempCheck – Privacy Policy</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      background: linear-gradient(
+        to bottom,
+        #80C2F2,
+        #ADDBF7 30%,
+        #E6D4B3 65%,
+        #F0C794
+      );
+      background-attachment: fixed;
+      color: #1d1d1f;
+    }
+
+    header {
+      backdrop-filter: blur(20px) saturate(1.8);
+      -webkit-backdrop-filter: blur(20px) saturate(1.8);
+      background: rgba(255,255,255,0.45);
+      border-bottom: 0.5px solid rgba(255,255,255,0.7);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 800;
+      color: #1d1d1f;
+      letter-spacing: -0.4px;
+    }
+
+    .logo span { color: #E07A30; }
+
+    .lang-toggle {
+      display: flex;
+      background: rgba(255,255,255,0.5);
+      border: 0.5px solid rgba(255,255,255,0.8);
+      border-radius: 10px;
+      padding: 3px;
+      gap: 2px;
+    }
+
+    .lang-btn {
+      border: none;
+      background: transparent;
+      padding: 5px 14px;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      color: rgba(29,29,31,0.5);
+      transition: all 0.18s;
+    }
+
+    .lang-btn.active {
+      background: rgba(255,255,255,0.85);
+      color: #1d1d1f;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+    }
+
+    main {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 48px 20px 80px;
+    }
+
+    .content { display: none; }
+    .content.visible { display: block; }
+
+    h1 {
+      font-size: 34px;
+      font-weight: 800;
+      letter-spacing: -0.6px;
+      margin-bottom: 6px;
+      color: #1d1d1f;
+    }
+
+    .last-updated {
+      font-size: 14px;
+      color: rgba(29,29,31,0.45);
+      margin-bottom: 28px;
+    }
+
+    .card {
+      backdrop-filter: blur(24px) saturate(1.6);
+      -webkit-backdrop-filter: blur(24px) saturate(1.6);
+      background: rgba(255,255,255,0.52);
+      border-radius: 24px;
+      border: 0.5px solid rgba(255,255,255,0.75);
+      box-shadow: 0 6px 32px rgba(0,0,0,0.07);
+      padding: 28px 28px;
+    }
+
+    .highlight {
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      background: rgba(224, 122, 48, 0.10);
+      border-left: 3px solid #E07A30;
+      border-radius: 0 12px 12px 0;
+      padding: 14px 18px;
+      margin-bottom: 8px;
+    }
+
+    .highlight p {
+      font-size: 15px;
+      font-weight: 500;
+      color: #1d1d1f;
+      margin: 0;
+    }
+
+    h2 {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: rgba(29,29,31,0.45);
+      margin: 28px 0 8px;
+    }
+
+    p {
+      font-size: 15px;
+      line-height: 1.7;
+      color: #3d3d3f;
+      margin-bottom: 10px;
+    }
+
+    ul {
+      padding-left: 18px;
+      margin-bottom: 10px;
+    }
+
+    ul li {
+      font-size: 15px;
+      line-height: 1.7;
+      color: #3d3d3f;
+      margin-bottom: 6px;
+    }
+
+    a {
+      color: #0071e3;
+      text-decoration: none;
+    }
+
+    a:hover { text-decoration: underline; }
+
+    footer {
+      text-align: center;
+      font-size: 13px;
+      color: rgba(29,29,31,0.4);
+      padding: 24px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Temp<span>Check</span></div>
+  <div class="lang-toggle">
+    <button class="lang-btn active" onclick="setLang('en', this)">EN</button>
+    <button class="lang-btn" onclick="setLang('es', this)">ES</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ENGLISH -->
+  <div id="content-en" class="content visible">
+    <h1>Privacy Policy</h1>
+    <p class="last-updated">Last updated: June 2026</p>
+
+    <div class="card">
+      <div class="highlight">
+        <p>TempCheck does not collect, store, or share any personal data. Your privacy is fully protected.</p>
+      </div>
+
+      <h2>What TempCheck does</h2>
+      <p>TempCheck is an iOS app that compares today's temperature to historical averages — so you can see whether today is warmer, cooler, or in line with what's normal for that date and location.</p>
+
+      <h2>Data we collect</h2>
+      <p>None. TempCheck does not require an account and stores no information about you on any server.</p>
+
+      <h2>Location</h2>
+      <p>If you grant permission, TempCheck uses your device's location to show weather for your current position. Your coordinates are sent directly to Open-Meteo to retrieve temperature data. We never store, log, or share your location.</p>
+      <p>You can also search any city manually — no location permission needed.</p>
+
+      <h2>Third-party services</h2>
+      <ul>
+        <li><strong>Open-Meteo</strong> (<a href="https://open-meteo.com" target="_blank">open-meteo.com</a>) — provides current and historical weather data. Only your coordinates are sent. Open-Meteo is open-source and does not track users.</li>
+        <li><strong>Apple MapKit</strong> — converts city names into coordinates. Governed by <a href="https://www.apple.com/legal/privacy/" target="_blank">Apple's Privacy Policy</a>.</li>
+      </ul>
+
+      <h2>Analytics & tracking</h2>
+      <p>TempCheck contains no analytics, no advertising, and no tracking of any kind.</p>
+
+      <h2>Children's privacy</h2>
+      <p>TempCheck collects no data from anyone. The app is safe for all ages.</p>
+
+      <h2>Changes to this policy</h2>
+      <p>Any updates will be published here with a revised date.</p>
+    </div>
+  </div>
+
+  <!-- ESPAÑOL -->
+  <div id="content-es" class="content">
+    <h1>Política de Privacidad</h1>
+    <p class="last-updated">Última actualización: junio de 2026</p>
+
+    <div class="card">
+      <div class="highlight">
+        <p>TempCheck no recopila, almacena ni comparte ningún dato personal. Tu privacidad está completamente protegida.</p>
+      </div>
+
+      <h2>Qué hace TempCheck</h2>
+      <p>TempCheck es una app iOS que compara la temperatura de hoy con los promedios históricos, para que puedas ver si hoy hace más calor, más frío o está dentro de lo habitual para esa fecha y lugar.</p>
+
+      <h2>Datos que recopilamos</h2>
+      <p>Ninguno. TempCheck no requiere cuenta y no almacena ninguna información tuya en ningún servidor.</p>
+
+      <h2>Ubicación</h2>
+      <p>Si lo permites, TempCheck usa la ubicación de tu dispositivo para mostrar el tiempo en tu posición actual. Tus coordenadas se envían directamente a Open-Meteo para obtener datos de temperatura. Nunca almacenamos, registramos ni compartimos tu ubicación.</p>
+      <p>También puedes buscar cualquier ciudad manualmente — sin necesidad de dar permiso de ubicación.</p>
+
+      <h2>Servicios de terceros</h2>
+      <ul>
+        <li><strong>Open-Meteo</strong> (<a href="https://open-meteo.com" target="_blank">open-meteo.com</a>) — proporciona datos meteorológicos actuales e históricos. Solo se envían tus coordenadas. Open-Meteo es de código abierto y no rastrea usuarios.</li>
+        <li><strong>Apple MapKit</strong> — convierte nombres de ciudades en coordenadas. Sujeto a la <a href="https://www.apple.com/es/legal/privacy/" target="_blank">Política de Privacidad de Apple</a>.</li>
+      </ul>
+
+      <h2>Analítica y rastreo</h2>
+      <p>TempCheck no contiene ningún sistema de analítica, publicidad ni rastreo de ningún tipo.</p>
+
+      <h2>Privacidad de menores</h2>
+      <p>TempCheck no recopila datos de nadie. La app es apta para todas las edades.</p>
+
+      <h2>Cambios en esta política</h2>
+      <p>Cualquier actualización se publicará aquí con una nueva fecha.</p>
+    </div>
+  </div>
+
+</main>
+
+<footer>© 2026 TempCheck</footer>
+
+<script>
+  function setLang(lang, btn) {
+    document.getElementById('content-en').classList.remove('visible');
+    document.getElementById('content-es').classList.remove('visible');
+    document.getElementById('content-' + lang).classList.add('visible');
+    document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.documentElement.lang = lang;
+  }
+</script>
+
+</body>
+</html>
