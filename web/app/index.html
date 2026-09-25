@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>TempCheck · ¿Es hoy un día normal?</title>
+  <meta name="description" content="Compara el tiempo de hoy con lo normal para esta fecha desde 1980." />
+  <meta name="theme-color" content="#f2f2f5" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="top-row">
+      <div>
+        <button class="city" id="cityBtn" type="button" aria-label="Cambiar ciudad"></button>
+        <button class="dateline" id="dateBtn" type="button"></button>
+        <input type="date" id="dateInput" class="visually-hidden" tabindex="-1" aria-hidden="true" />
+      </div>
+      <div class="lang" role="group" aria-label="Idioma / Language">
+        <button type="button" data-lang="es">ES</button>
+        <button type="button" data-lang="en">EN</button>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button type="button" role="tab" data-tab="today"></button>
+      <button type="button" role="tab" data-tab="week"></button>
+    </nav>
+  </header>
+
+  <main id="main" aria-live="polite"></main>
+
+  <footer class="foot" id="foot"></footer>
+
+  <dialog id="search">
+    <form method="dialog" class="search-head">
+      <input id="searchInput" type="search" autocomplete="off" />
+      <button type="submit" class="link" id="searchClose"></button>
+    </form>
+    <ul id="searchResults"></ul>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
