@@ -35,6 +35,18 @@ const T = {
     search: "Busca una ciudad", close: "Cerrar", noResults: "Sin resultados",
     footer: `Lo normal = la media de ese día desde ${BASELINE_START}.`, privacy: "Privacidad",
     title: "¿Es hoy un día normal?",
+    push: {
+      title: "Aviso diario",
+      pitch: (c) => `Recibe cada mañana a las 8:00 cómo viene el día en ${c} frente a lo normal.`,
+      enable: "Activar aviso diario", disable: "Desactivar", copy: "Copiar código", copied: "Copiado",
+      on: (c) => `Aviso diario activado para ${c}.`,
+      when: "Te llegará cada mañana a las 8:00 (hora peninsular). Si cambias de ciudad o idioma aquí, el aviso cambia contigo.",
+      sendCode: "Para darte de alta en la beta, envía este código a quien te invitó. Si cambias de ciudad o idioma, vuelve a mandarlo.",
+      ios: "En iPhone, las notificaciones solo funcionan con la web instalada: pulsa Compartir y luego «Añadir a pantalla de inicio». Abre TempCheck desde ese icono y activa aquí el aviso.",
+      unsupported: "Este navegador no admite notificaciones.",
+      denied: "Has bloqueado las notificaciones de esta web. Actívalas en los ajustes del navegador y vuelve aquí.",
+      failed: "No se ha podido activar. Vuelve a intentarlo.",
+    },
   },
   en: {
     today: "Today", week: "This week", backToToday: "Back to today", changeCity: "Change city",
@@ -56,6 +68,18 @@ const T = {
     search: "Search for a city", close: "Close", noResults: "No results",
     footer: `Normal = the average for that date since ${BASELINE_START}.`, privacy: "Privacy",
     title: "Is today unusual?",
+    push: {
+      title: "Daily heads-up",
+      pitch: (c) => `Get how the day compares with normal in ${c}, every morning at 8:00.`,
+      enable: "Turn on daily heads-up", disable: "Turn off", copy: "Copy code", copied: "Copied",
+      on: (c) => `Daily heads-up on for ${c}.`,
+      when: "It arrives every morning at 8:00 (Madrid time). Change city or language here and the heads-up follows.",
+      sendCode: "To join the beta, send this code to whoever invited you. If you change city or language, send it again.",
+      ios: "On iPhone, notifications only work with the web installed: tap Share, then “Add to Home Screen”. Open TempCheck from that icon and turn it on here.",
+      unsupported: "This browser doesn't support notifications.",
+      denied: "Notifications are blocked for this site. Allow them in your browser settings and come back.",
+      failed: "Couldn't turn it on. Try again.",
+    },
   },
 };
 
@@ -97,8 +121,8 @@ function syncUrl() {
 // ---------- Analytics (GoatCounter: no cookies, no personal data) ----------
 // Page views are counted by hand with clean paths (/today, /week, /day) and the city as the
 // title, so the stats group by screen instead of by every lat/lon/date combination.
-// Visits that arrive from the daily WhatsApp link carry ?src=wa and are counted as such.
-const cameFromWhatsApp = new URLSearchParams(location.search).get("src") === "wa";
+// Visits from the daily message carry ?src=wa (WhatsApp) or ?src=push (Web Push).
+const arrivedFrom = { wa: "whatsapp", push: "push" }[new URLSearchParams(location.search).get("src")] ?? null;
 const trackQueue = [];
 let lastView = "";
 
@@ -115,7 +139,7 @@ function trackView() {
   if (key === lastView) return;
   const first = !lastView;
   lastView = key;
-  track({ path, title: state.loc.name, ...(first && cameFromWhatsApp ? { referrer: "whatsapp" } : {}) });
+  track({ path, title: state.loc.name, ...(first && arrivedFrom ? { referrer: arrivedFrom } : {}) });
 }
 
 if (GOATCOUNTER_CODE) {
@@ -127,7 +151,100 @@ if (GOATCOUNTER_CODE) {
   s.onload = () => { while (trackQueue.length) window.goatcounter?.count?.(trackQueue.shift()); };
   document.head.append(s);
 }
-if (cameFromWhatsApp) trackEvent("from-whatsapp");
+if (arrivedFrom) trackEvent(`from-${arrivedFrom}`);
+
+// ---------- Daily push (Web Push) ----------
+// Turning it on registers the browser's push subscription (plus city and language) with our
+// Cloudflare Worker (push-worker/), which the daily GitHub Actions job reads to send. While
+// PUSH_API is empty the card falls back to the beta flow: it shows the subscription as a code
+// to paste into the WEBPUSH_SUBSCRIPTIONS secret, and only with ?beta=1 or when installed.
+const PUSH_API = "https://tempcheck-push.tempcheck-app.workers.dev";
+const VAPID_PUBLIC_KEY = "BHiR-87Dl6hNut9NoRG3kGIMYag3bgfg3fr3GyTShZEVTigWuCoTGbCtWc3veeUj3ETap09yhJTCuOWP5hqKN-Q";
+const pushSupported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const isInstalled = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+if (new URLSearchParams(location.search).get("beta") === "1") store.set("cc_beta", true);
+const showPush = () => Boolean(PUSH_API) || store.get("cc_beta") === true || isInstalled;
+const pushRecord = (sub) => ({ sub: sub.toJSON(), city: state.loc.name, lat: state.loc.lat, lon: state.loc.lon, lang: state.lang });
+
+async function pushApi(path, body) {
+  const res = await fetch(PUSH_API + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`push api ${res.status}`);
+}
+
+// Keeps the server's copy in step with the city and language on screen (once per change).
+async function syncPush(sub) {
+  const key = `${sub.endpoint}|${state.loc.lat},${state.loc.lon}|${state.lang}`;
+  if (!PUSH_API || store.get("cc_push_synced") === key) return;
+  try { await pushApi("/subscribe", pushRecord(sub)); store.set("cc_push_synced", key); } catch { /* retried on next render */ }
+}
+
+const swReady = pushSupported ? navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready).catch(() => null) : Promise.resolve(null);
+
+function vapidKey() {
+  const b64 = VAPID_PUBLIC_KEY.replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0));
+}
+const pushCode = (sub) => JSON.stringify(pushRecord(sub));
+
+async function renderPush(message = "") {
+  const card = $("pushCard");
+  if (!showPush()) { card.hidden = true; return; }
+  card.hidden = false;
+  const p = t().push;
+  const city = esc(state.loc.name);
+  const head = `<h2>🔔 ${esc(p.title)}</h2>`;
+  const note = message ? `<p style="color:var(--much-hotter)">${esc(message)}</p>` : "";
+
+  if (isIOS && !isInstalled) { card.innerHTML = head + `<p>${esc(p.ios)}</p>`; return; }
+  if (!pushSupported) { card.innerHTML = head + `<p>${esc(p.unsupported)}</p>`; return; }
+  if (Notification.permission === "denied") { card.innerHTML = head + `<p>${esc(p.denied)}</p>`; return; }
+
+  const reg = await swReady;
+  const sub = await reg?.pushManager.getSubscription();
+  if (sub && PUSH_API) {
+    syncPush(sub);
+    card.innerHTML = head + `<p>✅ ${p.on(city)}</p><p>${esc(p.when)}</p>
+      <button type="button" class="btn secondary" id="pushOff">${esc(p.disable)}</button>`;
+  } else if (sub) {
+    card.innerHTML = head + `<p>✅ ${p.on(city)}</p><p>${esc(p.sendCode)}</p>
+      <textarea readonly id="pushCode">${esc(pushCode(sub))}</textarea>
+      <div class="row"><button type="button" class="btn" id="pushCopy">${esc(p.copy)}</button>
+      <button type="button" class="btn secondary" id="pushOff">${esc(p.disable)}</button></div>`;
+  } else {
+    card.innerHTML = head + `<p>${p.pitch(city)}</p>${note}<button type="button" class="btn" id="pushOn">${esc(p.enable)}</button>`;
+  }
+}
+
+document.getElementById("pushCard").addEventListener("click", async (e) => {
+  const p = t().push;
+  if (e.target.id === "pushOn") {
+    try {
+      if ((await Notification.requestPermission()) !== "granted") return renderPush();
+      const reg = await swReady;
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey() });
+      if (PUSH_API) {
+        try { await pushApi("/subscribe", pushRecord(sub)); }
+        catch (err) { await sub.unsubscribe(); throw err; } // don't look "on" if we can't deliver
+        store.set("cc_push_synced", `${sub.endpoint}|${state.loc.lat},${state.loc.lon}|${state.lang}`);
+      }
+      trackEvent("push-subscribe", state.loc.name);
+      renderPush();
+    } catch (err) { console.error(err); renderPush(p.failed); }
+  } else if (e.target.id === "pushCopy") {
+    const code = $("pushCode").value;
+    try { await navigator.clipboard.writeText(code); } catch { $("pushCode").select(); document.execCommand("copy"); }
+    e.target.textContent = p.copied;
+    setTimeout(() => { e.target.textContent = p.copy; }, 1500);
+  } else if (e.target.id === "pushOff") {
+    const sub = await (await swReady)?.pushManager.getSubscription();
+    if (sub && PUSH_API) { try { await pushApi("/unsubscribe", { endpoint: sub.endpoint }); } catch { /* the daily job drops it once the browser reports it gone */ } }
+    await sub?.unsubscribe();
+    store.set("cc_push_synced", null);
+    trackEvent("push-unsubscribe");
+    renderPush();
+  }
+});
 
 // ---------- Formatting ----------
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -435,6 +552,7 @@ async function ensureForecast(token) {
 async function render() {
   const token = ++state.token;
   renderHeader();
+  renderPush();
   main.innerHTML = state.tab === "today"
     ? skeletonHero() + skeletonCard(6) + skeletonCard(3)
     : skeletonHero() + skeletonCard(7);

@@ -211,3 +211,12 @@ dialog#search::backdrop { background: rgba(0, 0, 0, 0.3); }
 @media (prefers-reduced-motion: reduce) { .shimmer { animation: none; } }
 .dateline.static { cursor: default; }
 .dateline.static::after { content: ""; }
+
+/* Daily push card (beta) */
+.push { margin-top: 10px; }
+.push h2 { margin: 0 0 6px; font-size: 15px; font-weight: 650; }
+.push p { margin: 0 0 10px; font-size: 14px; line-height: 1.4; color: var(--text-2); }
+.push .btn { display: inline-block; padding: 10px 16px; border-radius: 12px; background: var(--text); color: var(--bg); font-weight: 600; font-size: 15px; }
+.push .btn.secondary { background: var(--track); color: var(--text); }
+.push textarea { width: 100%; height: 76px; font: 11px ui-monospace, Menlo, monospace; padding: 8px; border-radius: 10px; border: 0.5px solid var(--hairline); background: var(--track); color: var(--text); resize: none; }
+.push .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
