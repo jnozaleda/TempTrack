@@ -7,7 +7,12 @@
 //   WHATSAPP_RECIPIENTS       JSON (GitHub secret — phone numbers never go in the repo):
 //                             [{"to":"346XXXXXXXX","city":"Madrid","lat":40.4168,"lon":-3.7038,"lang":"es"}]
 //   WHATSAPP_PHONE_NUMBER_ID  the test number's ID (see META_IDS.md)
-//   DRY_RUN=1                 print the messages instead of sending them
+//   MODE                      what to do (default "template"):
+//                               template     the real daily message (needs `daily_summary` approved)
+//                               dry_run      print the messages, send nothing
+//                               hello_world  send Meta's pre-approved sample: checks token, number, recipients
+//                               text_preview send today's message as plain text + link. Only reaches people
+//                                            who wrote to the test number in the last 24 h (WhatsApp rule)
 //   SCHEDULE                  the cron that fired (github.event.schedule); see shouldRunNow()
 
 import { fetchForecast, loadDay, daysSinceEpoch } from "../app/climate.js";
@@ -18,7 +23,9 @@ const TEMPLATE = "daily_summary";
 const WEB_BASE = "https://jnozaleda.github.io/TempTrack/web/app/?";
 
 const env = process.env;
-const dryRun = env.DRY_RUN === "1" || process.argv.includes("--dry-run");
+const MODES = ["template", "dry_run", "hello_world", "text_preview"];
+const mode = process.argv.includes("--dry-run") ? "dry_run" : (env.MODE || "template");
+if (!MODES.includes(mode)) throw new Error(`unknown MODE "${mode}" (use ${MODES.join(", ")})`);
 
 // GitHub cron is UTC-only, so the workflow fires at 06:00 and 07:00 UTC and this keeps the one
 // that is 08:00 in Madrid (06:00 UTC in summer, 07:00 UTC in winter). Deciding by which cron
@@ -58,37 +65,61 @@ async function buildMessage(place) {
   };
 }
 
+// What the approved template will render, as plain text — for text_preview only.
+function previewText(lang, msg) {
+  const [city, delta, max, normal, sentence] = msg.body;
+  const url = WEB_BASE + msg.urlSuffix;
+  return lang === "en"
+    ? `Good morning. Today in ${city}: ${delta} vs normal (high ${max}, usually ${normal}).\n\n${sentence}\n\nSee details: ${url}\n\n(test preview)`
+    : `Buenos días. Hoy en ${city}: ${delta} respecto a lo normal (máx ${max}, lo normal ${normal}).\n\n${sentence}\n\nVer detalle: ${url}\n\n(vista previa de prueba)`;
+}
+
+function payload(to, lang, msg) {
+  if (mode === "hello_world") {
+    return { type: "template", template: { name: "hello_world", language: { code: "en_US" } } };
+  }
+  if (mode === "text_preview") {
+    return { type: "text", text: { body: previewText(lang, msg), preview_url: true } };
+  }
+  return {
+    type: "template",
+    template: {
+      name: TEMPLATE,
+      language: { code: lang },
+      components: [
+        { type: "body", parameters: msg.body.map((text) => ({ type: "text", text })) },
+        { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: msg.urlSuffix }] },
+      ],
+    },
+  };
+}
+
 async function send(to, lang, msg) {
   const res = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
     method: "POST",
     headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to,
-      type: "template",
-      template: {
-        name: TEMPLATE,
-        language: { code: lang },
-        components: [
-          { type: "body", parameters: msg.body.map((text) => ({ type: "text", text })) },
-          { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: msg.urlSuffix }] },
-        ],
-      },
-    }),
+    body: JSON.stringify({ messaging_product: "whatsapp", to, ...payload(to, lang, msg) }),
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${json.error?.message ?? "unknown error"}`);
+  if (!res.ok) {
+    const err = json.error ?? {};
+    // Meta's code + details say exactly what's wrong (e.g. 132001 template missing/not approved,
+    // 131047 outside the 24 h window, 131030 number not in the test recipient list).
+    const detail = err.error_data?.details ? ` — ${err.error_data.details}` : "";
+    throw new Error(`HTTP ${res.status} [${err.code ?? "?"}] ${err.message ?? "unknown error"}${detail}`);
+  }
   return json.messages?.[0]?.id;
 }
 
 const mask = (to) => `…${String(to).slice(-3)}`; // logs are public in a public repo
 
 async function main() {
+  console.log(`Mode: ${mode}`);
   if (!shouldRunNow()) { console.log("Not 08:00 in Madrid for this trigger — skipping."); return; }
 
   const recipients = JSON.parse(env.WHATSAPP_RECIPIENTS ?? "[]");
   if (!recipients.length) throw new Error("WHATSAPP_RECIPIENTS is empty");
-  if (!dryRun && (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID)) throw new Error("missing WHATSAPP_TOKEN or WHATSAPP_PHONE_NUMBER_ID");
+  if (mode !== "dry_run" && (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID)) throw new Error("missing WHATSAPP_TOKEN or WHATSAPP_PHONE_NUMBER_ID");
 
   // One weather computation per city + language, however many people share it.
   const messages = new Map();
@@ -98,7 +129,7 @@ async function main() {
     try {
       if (!messages.has(key)) messages.set(key, await buildMessage(r));
       const msg = messages.get(key);
-      if (dryRun) {
+      if (mode === "dry_run") {
         console.log(`[dry run] to ${mask(r.to)} (${r.city}, ${msg.date}):`, JSON.stringify(msg.body), msg.urlSuffix);
       } else {
         const id = await send(r.to, r.lang, msg);
