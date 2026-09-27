@@ -9,26 +9,35 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "dry_run = print only · hello_world = Meta's sample · text_preview = today's message as text (only if you wrote to the test number in the last 24 h) · template = the real message"
+        description: "dry_run = print only · push_only = Web Push only · hello_world = Meta's sample · text_preview = today's WhatsApp as text (only if you wrote to the test number in the last 24 h) · template = the real message (WhatsApp + push)"
         type: choice
-        options: [dry_run, hello_world, text_preview, template]
+        options: [dry_run, push_only, hello_world, text_preview, template]
         default: dry_run
 
 jobs:
   send:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+      - name: Install
+        run: npm ci --omit=dev
       - name: Send
-        working-directory: web
         env:
           WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
           WHATSAPP_RECIPIENTS: ${{ secrets.WHATSAPP_RECIPIENTS }}
           WHATSAPP_PHONE_NUMBER_ID: "1327808770424150"
+          WEBPUSH_API: ${{ vars.WEBPUSH_API }}
+          WEBPUSH_ADMIN_TOKEN: ${{ secrets.WEBPUSH_ADMIN_TOKEN }}
+          WEBPUSH_SUBSCRIPTIONS: ${{ secrets.WEBPUSH_SUBSCRIPTIONS }}
+          WEBPUSH_VAPID_PUBLIC: "BHiR-87Dl6hNut9NoRG3kGIMYag3bgfg3fr3GyTShZEVTigWuCoTGbCtWc3veeUj3ETap09yhJTCuOWP5hqKN-Q"
+          WEBPUSH_VAPID_PRIVATE: ${{ secrets.WEBPUSH_VAPID_PRIVATE }}
           SCHEDULE: ${{ github.event.schedule }}
           MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'template' }}
         run: node whatsapp/send-daily.mjs
