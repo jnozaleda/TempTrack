@@ -1,0 +1,33 @@
+name: Daily WhatsApp summary
+
+on:
+  schedule:
+    # 08:00 in Madrid: 06:00 UTC in summer, 07:00 UTC in winter. Both fire; the script keeps
+    # only the right one. GitHub may start scheduled runs a few minutes late.
+    - cron: "0 6 * * *"
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (print the messages, don't send)"
+        type: boolean
+        default: true
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Send
+        working-directory: web
+        env:
+          WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
+          WHATSAPP_RECIPIENTS: ${{ secrets.WHATSAPP_RECIPIENTS }}
+          WHATSAPP_PHONE_NUMBER_ID: "1327808770424150"
+          SCHEDULE: ${{ github.event.schedule }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+        run: node whatsapp/send-daily.mjs
