@@ -9,6 +9,8 @@ import {
 import { dayLine, weekLine, trendLine } from "./phrases.js";
 
 const APP_NAME = "TempCheck";
+// GoatCounter site code (the "xxx" in xxx.goatcounter.com). Empty = no analytics at all.
+const GOATCOUNTER_CODE = "tempcheck";
 const DEFAULT_LOC = { name: "Madrid", lat: 40.4168, lon: -3.7038 };
 
 // ---------- Copy ----------
@@ -92,6 +94,41 @@ function syncUrl() {
   history.replaceState(null, "", `?${p}`);
 }
 
+// ---------- Analytics (GoatCounter: no cookies, no personal data) ----------
+// Page views are counted by hand with clean paths (/today, /week, /day) and the city as the
+// title, so the stats group by screen instead of by every lat/lon/date combination.
+// Visits that arrive from the daily WhatsApp link carry ?src=wa and are counted as such.
+const cameFromWhatsApp = new URLSearchParams(location.search).get("src") === "wa";
+const trackQueue = [];
+let lastView = "";
+
+function track(hit) {
+  if (!GOATCOUNTER_CODE) return;
+  if (window.goatcounter?.count) window.goatcounter.count(hit);
+  else trackQueue.push(hit);
+}
+const trackEvent = (name, title = "") => track({ path: name, title, event: true });
+
+function trackView() {
+  const path = state.tab === "week" ? "/week" : isToday() ? "/today" : "/day";
+  const key = `${path}|${state.loc.name}|${selectedDate()}`;
+  if (key === lastView) return;
+  const first = !lastView;
+  lastView = key;
+  track({ path, title: state.loc.name, ...(first && cameFromWhatsApp ? { referrer: "whatsapp" } : {}) });
+}
+
+if (GOATCOUNTER_CODE) {
+  const s = document.createElement("script");
+  s.async = true;
+  s.src = "https://gc.zgo.at/count.js";
+  s.dataset.goatcounter = `https://${GOATCOUNTER_CODE}.goatcounter.com/count`;
+  s.dataset.goatcounterSettings = JSON.stringify({ no_onload: true });
+  s.onload = () => { while (trackQueue.length) window.goatcounter?.count?.(trackQueue.shift()); };
+  document.head.append(s);
+}
+if (cameFromWhatsApp) trackEvent("from-whatsapp");
+
 // ---------- Formatting ----------
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const deg = (v) => `${Math.round(v)}°`;
@@ -144,7 +181,7 @@ function renderHeader() {
     $("dateInput").max = state.forecast.days.at(-1).date;
     $("dateInput").value = selectedDate();
   }
-  $("foot").innerHTML = `${esc(t().footer)}<br>Datos · Data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0) · <a href="../">${esc(t().privacy)}</a>`;
+  $("foot").innerHTML = `${esc(t().footer)}<br>Datos · Data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0) · <a href="../../">${esc(t().privacy)}</a>`;
   $("searchInput").placeholder = t().search;
   $("searchClose").textContent = t().close;
 }
@@ -404,6 +441,7 @@ async function render() {
   try {
     if (!(await ensureForecast(token))) return;
     renderHeader();
+    trackView();
     if (state.tab === "today") await renderDay(token);
     else await renderWeek(token);
   } catch (e) {
@@ -448,6 +486,7 @@ function setLocation(loc) {
   state.forecast = null;
   memo.day.clear(); memo.week = null; memo.heat = null;
   store.set("cc_loc", loc);
+  trackEvent("city-change", loc.name);
   syncUrl();
   render();
 }
@@ -457,6 +496,7 @@ main.addEventListener("click", (e) => {
   if (e.target.closest("#retry")) { state.forecast = null; render(); return; }
   const row = e.target.closest(".day-row");
   if (row) {
+    trackEvent("week-day-tap");
     state.tab = "today";
     state.date = row.dataset.date === state.forecast.today ? null : row.dataset.date;
     syncUrl(); render(); scrollTo({ top: 0, behavior: "smooth" });
@@ -466,12 +506,14 @@ main.addEventListener("click", (e) => {
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
   if (state.tab === b.dataset.tab) return;
   state.tab = b.dataset.tab;
+  trackEvent(`tab-${state.tab}`);
   syncUrl(); render();
 }));
 
 document.querySelectorAll(".lang button").forEach((b) => b.addEventListener("click", () => {
   if (state.lang === b.dataset.lang) return;
   state.lang = b.dataset.lang;
+  trackEvent(`lang-${state.lang}`);
   store.set("cc_lang", state.lang);
   syncUrl(); render();
 }));
@@ -484,6 +526,7 @@ $("dateInput").addEventListener("change", (e) => {
   const v = e.target.value;
   if (!v || !state.forecast) return;
   state.date = v === state.forecast.today ? null : v;
+  trackEvent("date-pick");
   syncUrl(); render();
 });
 
