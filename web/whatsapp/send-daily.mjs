@@ -67,6 +67,7 @@ async function buildMessage(place, src = "wa") {
   return {
     date: forecast.today,
     body: [place.city, signed(delta), deg(weather.max), deg(stats.avgMax), sentence].map(clean),
+    rainMM: weather.rain ?? 0,
     urlSuffix: query.toString(),
   };
 }
@@ -120,11 +121,24 @@ async function send(to, lang, msg) {
 const mask = (to) => `…${String(to).slice(-3)}`; // logs are public in a public repo
 
 // ---------- Web Push ----------
+// Notification titles get cut at ~30 characters on a phone (iOS already shows "TempCheck"
+// above them), so the title is only city + difference, with 🌧️ when rain is forecast:
+// "Madrid: +6° vs lo normal 🌧️". The rain amount leads the body, then the numbers, then the
+// one-liner — which, on a rainy day, always carries the umbrella tip (0.1 mm threshold).
+function rainNote(lang, mm) {
+  if (mm < 0.1) return "";
+  const amount = `${mm.toFixed(1).replace(".", lang === "en" ? "." : ",")} mm`;
+  if (lang === "en") return mm < 1 ? "A bit of rain." : `Rain (${amount}).`;
+  return mm < 1 ? "Algo de lluvia." : `Lluvia (${amount}).`;
+}
+
 function pushPayload(lang, msg) {
   const [city, delta, max, normal, sentence] = msg.body;
+  const rain = rainNote(lang, msg.rainMM);
+  const icon = rain ? (msg.rainMM < 1 ? " 🌦️" : " 🌧️") : "";
   return {
-    title: lang === "en" ? `${city} today: ${delta} vs normal` : `${city} hoy: ${delta} respecto a lo normal`,
-    body: lang === "en" ? `High ${max} (usually ${normal}). ${sentence}` : `Máx ${max} (lo normal, ${normal}). ${sentence}`,
+    title: (lang === "en" ? `${city}: ${delta} vs normal` : `${city}: ${delta} vs lo normal`) + icon,
+    body: [rain, lang === "en" ? `High ${max}, usually ${normal}.` : `Máx ${max}, lo normal ${normal}.`, sentence].filter(Boolean).join(" "),
     url: WEB_BASE + msg.urlSuffix,
   };
 }
