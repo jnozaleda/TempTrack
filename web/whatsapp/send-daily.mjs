@@ -1,5 +1,5 @@
-// Daily WhatsApp summary: for each recipient, today's "vs normal" for their city plus the same
-// one-liner the web and the app show, sent with the approved `daily_summary` template.
+// Daily summary: for each recipient, today's "vs normal" for their city plus the same one-liner
+// the web and the app show — by WhatsApp (approved `daily_summary` template) and/or Web Push.
 // Run by .github/workflows/daily-whatsapp.yml. Node 20+, no dependencies.
 //
 // Env:
@@ -7,8 +7,14 @@
 //   WHATSAPP_RECIPIENTS       JSON (GitHub secret — phone numbers never go in the repo):
 //                             [{"to":"346XXXXXXXX","city":"Madrid","lat":40.4168,"lon":-3.7038,"lang":"es"}]
 //   WHATSAPP_PHONE_NUMBER_ID  the test number's ID (see META_IDS.md)
+//   WEBPUSH_API               the Cloudflare Worker holding push subscriptions (push-worker/)
+//   WEBPUSH_ADMIN_TOKEN       its ADMIN_TOKEN (GitHub secret)
+//   WEBPUSH_SUBSCRIPTIONS     optional extra subscriptions pasted by hand (GitHub secret, JSON array)
+//   WEBPUSH_VAPID_PUBLIC      public key (also in app/app.js)
+//   WEBPUSH_VAPID_PRIVATE     private key (GitHub secret)
 //   MODE                      what to do (default "template"):
-//                               template     the real daily message (needs `daily_summary` approved)
+//                               template     the real daily message: WhatsApp template + Web Push
+//                               push_only    only the Web Push part
 //                               dry_run      print the messages, send nothing
 //                               hello_world  send Meta's pre-approved sample: checks token, number, recipients
 //                               text_preview send today's message as plain text + link. Only reaches people
@@ -23,7 +29,7 @@ const TEMPLATE = "daily_summary";
 const WEB_BASE = "https://jnozaleda.github.io/TempTrack/web/app/?";
 
 const env = process.env;
-const MODES = ["template", "dry_run", "hello_world", "text_preview"];
+const MODES = ["template", "push_only", "dry_run", "hello_world", "text_preview"];
 const mode = process.argv.includes("--dry-run") ? "dry_run" : (env.MODE || "template");
 if (!MODES.includes(mode)) throw new Error(`unknown MODE "${mode}" (use ${MODES.join(", ")})`);
 
@@ -44,7 +50,7 @@ const deg = (v) => `${Math.round(v)}°`;
 // Template variables can't contain newlines, tabs or 4+ spaces in a row.
 const clean = (s) => String(s).replace(/[\n\t]+/g, " ").replace(/ {4,}/g, "   ").trim();
 
-async function buildMessage(place) {
+async function buildMessage(place, src = "wa") {
   const loc = { name: place.city, lat: place.lat, lon: place.lon };
   const forecast = await fetchForecast(loc);
   const day = await loadDay(loc, forecast.today, forecast);
@@ -56,7 +62,7 @@ async function buildMessage(place) {
     delta, rainMM: weather.rain, daySwing: weather.min != null ? weather.max - weather.min : null,
     windKmh: weather.wind, uvIndex: weather.uv,
   }, place.city, daysSinceEpoch(forecast.today));
-  const query = new URLSearchParams({ c: place.city, lat: place.lat, lon: place.lon, l: place.lang, src: "wa" });
+  const query = new URLSearchParams({ c: place.city, lat: place.lat, lon: place.lon, l: place.lang, src });
 
   return {
     date: forecast.today,
@@ -113,12 +119,85 @@ async function send(to, lang, msg) {
 
 const mask = (to) => `…${String(to).slice(-3)}`; // logs are public in a public repo
 
+// ---------- Web Push ----------
+function pushPayload(lang, msg) {
+  const [city, delta, max, normal, sentence] = msg.body;
+  return {
+    title: lang === "en" ? `${city} today: ${delta} vs normal` : `${city} hoy: ${delta} respecto a lo normal`,
+    body: lang === "en" ? `High ${max} (usually ${normal}). ${sentence}` : `Máx ${max} (lo normal, ${normal}). ${sentence}`,
+    url: WEB_BASE + msg.urlSuffix,
+  };
+}
+
+async function pushApi(method, body) {
+  const res = await fetch(`${env.WEBPUSH_API}/subscriptions`, {
+    method,
+    headers: { Authorization: `Bearer ${env.WEBPUSH_ADMIN_TOKEN}`, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`push API ${method} → HTTP ${res.status}`);
+  return res.json();
+}
+
+// Subscriptions from the Worker plus any pasted by hand, one per endpoint.
+async function loadSubscribers() {
+  const manual = JSON.parse(env.WEBPUSH_SUBSCRIPTIONS || "[]").map((s) => ({ ...s, source: "manual" }));
+  const fromApi = env.WEBPUSH_API && env.WEBPUSH_ADMIN_TOKEN
+    ? (await pushApi("GET")).subscriptions.map((s) => ({ ...s, source: "api" })) : [];
+  const byEndpoint = new Map();
+  for (const s of [...manual, ...fromApi]) if (s.sub?.endpoint) byEndpoint.set(s.sub.endpoint, s);
+  return [...byEndpoint.values()];
+}
+
+async function sendPushes() {
+  const subscribers = await loadSubscribers();
+  console.log(`Web Push: ${subscribers.length} subscriber(s)`);
+  if (!subscribers.length) { console.log("Web Push: no subscribers"); return 0; }
+  let webpush = null;
+  if (mode !== "dry_run") {
+    if (!env.WEBPUSH_VAPID_PUBLIC || !env.WEBPUSH_VAPID_PRIVATE) throw new Error("missing WEBPUSH_VAPID_PUBLIC or WEBPUSH_VAPID_PRIVATE");
+    webpush = (await import("web-push")).default;
+    webpush.setVapidDetails("mailto:sustancial-losas-5w@icloud.com", env.WEBPUSH_VAPID_PUBLIC, env.WEBPUSH_VAPID_PRIVATE);
+  }
+  const messages = new Map();
+  let failures = 0;
+  for (const s of subscribers) {
+    const who = `push …${String(s.sub?.endpoint ?? "").slice(-6)}`;
+    const key = `${s.lat},${s.lon},${s.lang}`;
+    try {
+      if (!messages.has(key)) messages.set(key, await buildMessage(s, "push"));
+      const payload = pushPayload(s.lang, messages.get(key));
+      if (mode === "dry_run") { console.log(`[dry run] ${who} (${s.city}):`, JSON.stringify(payload)); continue; }
+      await webpush.sendNotification(s.sub, JSON.stringify(payload), { TTL: 6 * 3600, urgency: "normal" });
+      console.log(`sent ${who} (${s.city})`);
+    } catch (e) {
+      failures++;
+      // 404/410 = the browser dropped this subscription (notifications turned off, app deleted).
+      if (e.statusCode === 404 || e.statusCode === 410) {
+        failures--; // expected churn, not an error
+        if (s.source === "api") {
+          await pushApi("DELETE", { endpoint: s.sub.endpoint }).catch(() => {});
+          console.log(`${who} (${s.city}) expired — removed`);
+        } else {
+          console.log(`${who} (${s.city}) expired — remove it from WEBPUSH_SUBSCRIPTIONS`);
+        }
+        continue;
+      }
+      console.error(`FAILED ${who} (${s.city}): ${e.statusCode ?? ""} ${e.body || e.message}`);
+    }
+  }
+  return failures;
+}
+
 async function main() {
   console.log(`Mode: ${mode}`);
   if (!shouldRunNow()) { console.log("Not 08:00 in Madrid for this trigger — skipping."); return; }
 
-  const recipients = JSON.parse(env.WHATSAPP_RECIPIENTS ?? "[]");
-  if (!recipients.length) throw new Error("WHATSAPP_RECIPIENTS is empty");
+  const pushFailures = ["template", "push_only", "dry_run"].includes(mode) ? await sendPushes() : 0;
+  if (mode === "push_only") { if (pushFailures) process.exit(1); return; }
+
+  const recipients = JSON.parse(env.WHATSAPP_RECIPIENTS || "[]");
+  if (!recipients.length) { console.log("WhatsApp: no recipients"); if (pushFailures) process.exit(1); return; }
   if (mode !== "dry_run" && (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID)) throw new Error("missing WHATSAPP_TOKEN or WHATSAPP_PHONE_NUMBER_ID");
 
   // One weather computation per city + language, however many people share it.
@@ -140,7 +219,7 @@ async function main() {
       console.error(`FAILED for ${mask(r.to)} (${r.city}): ${e.message}`);
     }
   }
-  if (failures) process.exit(1);
+  if (failures || pushFailures) process.exit(1);
 }
 
 main().catch((e) => { console.error(e.message); process.exit(1); });
