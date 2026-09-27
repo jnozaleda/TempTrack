@@ -9,8 +9,8 @@ self.addEventListener("push", (event) => {
   try { data = event.data?.json() ?? {}; } catch { data = { body: event.data?.text() }; }
   event.waitUntil(self.registration.showNotification(data.title || "TempCheck", {
     body: data.body || "",
-    icon: "icon-192.png",
-    badge: "icon-192.png",
+    icon: "icon-192.png?v=2",
+    badge: "icon-192.png?v=2",
     tag: "daily-summary",          // a new day's message replaces yesterday's
     renotify: true,
     data: { url: data.url || "./" },
