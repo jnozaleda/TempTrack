@@ -1,0 +1,19 @@
+name = "tempcheck-push"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+
+# The daily clock: every 15 minutes 06:00–07:45 UTC (= 08:00–09:45 Madrid, summer or winter).
+# scheduled() in src/worker.js decides whether to start the GitHub workflow.
+[triggers]
+crons = ["0,15,30,45 6-7 * * *"]
+
+# Origins allowed to subscribe from the browser.
+[vars]
+ALLOWED_ORIGINS = "https://jnozaleda.github.io,http://localhost:8765"
+
+# Subscriptions live in KV: key = sha256(endpoint), the record itself in the key's metadata so
+# the daily job gets everything in a single list call. The id is filled in by
+# `wrangler kv namespace create SUBS` (see README.md).
+[[kv_namespaces]]
+binding = "SUBS"
+id = "50f8a7a80a38451d945433d690096209"
