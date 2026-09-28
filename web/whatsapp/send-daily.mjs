@@ -29,9 +29,13 @@ const TEMPLATE = "daily_summary";
 const WEB_BASE = "https://jnozaleda.github.io/TempTrack/web/app/?";
 
 const env = process.env;
-const MODES = ["template", "push_only", "dry_run", "hello_world", "text_preview"];
-const mode = process.argv.includes("--dry-run") ? "dry_run" : (env.MODE || "template");
+const MODES = ["template", "push_only", "dry_run", "hello_world", "text_preview", "scheduled"];
+let mode = process.argv.includes("--dry-run") ? "dry_run" : (env.MODE || "template");
 if (!MODES.includes(mode)) throw new Error(`unknown MODE "${mode}" (use ${MODES.join(", ")})`);
+// "scheduled" = the daily send triggered by the Cloudflare Worker's clock: the real message,
+// with the same once-a-day guard as GitHub's own (unreliable) schedule.
+const scheduled = mode === "scheduled" || Boolean(env.SCHEDULE?.trim());
+if (mode === "scheduled") mode = "template";
 
 // Madrid's date and hour right now ("2026-09-28", 9), whatever the server's time zone.
 function madridNow() {
@@ -212,13 +216,14 @@ async function sendPushes() {
 async function main() {
   console.log(`Mode: ${mode}`);
 
-  // GitHub starts scheduled runs late or skips them when busy, so the workflow fires every
-  // 15 minutes through the morning and only the first run from 08:00 Madrid time sends.
-  // The Worker remembers the day it went out. Manual runs skip this guard (and don't count).
-  const scheduled = Boolean(env.SCHEDULE?.trim());
+  // The Cloudflare Worker triggers this at 08:00 Madrid time (and re-checks every 15 minutes);
+  // GitHub's own schedule is only a backup, as it runs late or not at all when busy. Whichever
+  // comes first from 08:00 sends; the Worker remembers the day it went out. Nothing goes out
+  // after 12:00 — a "good morning" in the afternoon is worse than none. Manual runs skip this.
   const today = madridNow();
   if (scheduled) {
     if (today.hour < 8) { console.log(`${today.hour}:xx in Madrid — too early, waiting for 08:00.`); return; }
+    if (today.hour >= 12) { console.log(`${today.hour}:xx in Madrid — too late for a morning message, skipping today.`); return; }
     const { lastSent } = await stateApi("GET");
     if (lastSent === today.date) { console.log(`Already sent today (${today.date}) — nothing to do.`); return; }
   }

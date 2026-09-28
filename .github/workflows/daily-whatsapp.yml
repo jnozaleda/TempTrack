@@ -1,17 +1,17 @@
 name: Daily WhatsApp summary
 
 on:
+  # The daily send is started at 08:00 Madrid time by the Cloudflare Worker (push-worker/),
+  # as mode "scheduled". GitHub's own schedule below is only a backup: it runs late or not at
+  # all when busy. The script sends once a day, between 08:00 and 12:00; other runs no-op.
   schedule:
-    # GitHub delays or skips scheduled runs when busy (worst on the hour), so this fires every
-    # 15 minutes from 05:07 to 07:52 UTC — 07:07–09:52 in Madrid in summer, 06:07–08:52 in
-    # winter. The script sends once, on the first run from 08:00 Madrid time; the rest no-op.
     - cron: "7,22,37,52 5-7 * * *"
   workflow_dispatch:
     inputs:
       mode:
-        description: "dry_run = print only · push_only = Web Push only · hello_world = Meta's sample · text_preview = today's WhatsApp as text (only if you wrote to the test number in the last 24 h) · template = the real message (WhatsApp + push)"
+        description: "dry_run = print only · push_only = Web Push only · hello_world = Meta's sample · text_preview = today's WhatsApp as text (only if you wrote to the test number in the last 24 h) · template = the real message (WhatsApp + push) · scheduled = the daily send, once a day (used by the Cloudflare clock)"
         type: choice
-        options: [dry_run, push_only, hello_world, text_preview, template]
+        options: [dry_run, push_only, hello_world, text_preview, template, scheduled]
         default: dry_run
 
 # Never two runs at once, so a slow run and the next one can't both send.
