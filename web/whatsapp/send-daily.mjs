@@ -19,7 +19,7 @@
 //                               hello_world  send Meta's pre-approved sample: checks token, number, recipients
 //                               text_preview send today's message as plain text + link. Only reaches people
 //                                            who wrote to the test number in the last 24 h (WhatsApp rule)
-//   SCHEDULE                  the cron that fired (github.event.schedule); see shouldRunNow()
+//   SCHEDULE                  set by scheduled runs (github.event.schedule); see the once-a-day guard in main()
 
 import { fetchForecast, loadDay, daysSinceEpoch } from "../app/climate.js";
 import { dayLine } from "../app/phrases.js";
@@ -33,16 +33,22 @@ const MODES = ["template", "push_only", "dry_run", "hello_world", "text_preview"
 const mode = process.argv.includes("--dry-run") ? "dry_run" : (env.MODE || "template");
 if (!MODES.includes(mode)) throw new Error(`unknown MODE "${mode}" (use ${MODES.join(", ")})`);
 
-// GitHub cron is UTC-only, so the workflow fires at 06:00 and 07:00 UTC and this keeps the one
-// that is 08:00 in Madrid (06:00 UTC in summer, 07:00 UTC in winter). Deciding by which cron
-// fired, not by the clock, means GitHub's usual start delays can't make us skip or double-send.
-function shouldRunNow() {
-  const schedule = env.SCHEDULE?.trim();
-  if (!schedule) return true; // manual run
-  const madridOffset = new Intl.DateTimeFormat("en", { timeZone: "Europe/Madrid", timeZoneName: "shortOffset" })
-    .formatToParts(new Date()).find((p) => p.type === "timeZoneName").value; // "GMT+2" / "GMT+1"
-  const summer = madridOffset === "GMT+2";
-  return schedule.startsWith("0 6 ") ? summer : schedule.startsWith("0 7 ") ? !summer : true;
+// Madrid's date and hour right now ("2026-09-28", 9), whatever the server's time zone.
+function madridNow() {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date()).map((p) => [p.type, p.value]));
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) };
+}
+
+async function stateApi(method, body) {
+  const res = await fetch(`${env.WEBPUSH_API}/state`, {
+    method,
+    headers: { Authorization: `Bearer ${env.WEBPUSH_ADMIN_TOKEN}`, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`state API ${method} → HTTP ${res.status}`);
+  return res.json();
 }
 
 const signed = (d) => { const r = Math.round(d); return r === 0 ? "±0°" : `${r > 0 ? "+" : "−"}${Math.abs(r)}°`; };
@@ -205,9 +211,21 @@ async function sendPushes() {
 
 async function main() {
   console.log(`Mode: ${mode}`);
-  if (!shouldRunNow()) { console.log("Not 08:00 in Madrid for this trigger — skipping."); return; }
+
+  // GitHub starts scheduled runs late or skips them when busy, so the workflow fires every
+  // 15 minutes through the morning and only the first run from 08:00 Madrid time sends.
+  // The Worker remembers the day it went out. Manual runs skip this guard (and don't count).
+  const scheduled = Boolean(env.SCHEDULE?.trim());
+  const today = madridNow();
+  if (scheduled) {
+    if (today.hour < 8) { console.log(`${today.hour}:xx in Madrid — too early, waiting for 08:00.`); return; }
+    const { lastSent } = await stateApi("GET");
+    if (lastSent === today.date) { console.log(`Already sent today (${today.date}) — nothing to do.`); return; }
+  }
 
   const pushFailures = ["template", "push_only", "dry_run"].includes(mode) ? await sendPushes() : 0;
+  // Marked right after the pushes: a WhatsApp error must not make the next run push again.
+  if (scheduled) { await stateApi("PUT", { lastSent: today.date }); console.log(`Marked ${today.date} as sent.`); }
   if (mode === "push_only") { if (pushFailures) process.exit(1); return; }
 
   const recipients = JSON.parse(env.WHATSAPP_RECIPIENTS || "[]");
