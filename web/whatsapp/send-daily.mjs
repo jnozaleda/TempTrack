@@ -15,6 +15,7 @@
 //   MODE                      what to do (default "template"):
 //                               template     the real daily message: WhatsApp template + Web Push
 //                               push_only    only the Web Push part
+//                               wa_only      only the WhatsApp template part
 //                               dry_run      print the messages, send nothing
 //                               hello_world  send Meta's pre-approved sample: checks token, number, recipients
 //                               text_preview send today's message as plain text + link. Only reaches people
@@ -29,7 +30,7 @@ const TEMPLATE = "daily_summary";
 const WEB_BASE = "https://jnozaleda.github.io/TempTrack/web/app/?";
 
 const env = process.env;
-const MODES = ["template", "push_only", "dry_run", "hello_world", "text_preview", "scheduled"];
+const MODES = ["template", "push_only", "wa_only", "dry_run", "hello_world", "text_preview", "scheduled"];
 let mode = process.argv.includes("--dry-run") ? "dry_run" : (env.MODE || "template");
 if (!MODES.includes(mode)) throw new Error(`unknown MODE "${mode}" (use ${MODES.join(", ")})`);
 // "scheduled" = the daily send triggered by the Cloudflare Worker's clock: the real message,
@@ -60,6 +61,17 @@ const deg = (v) => `${Math.round(v)}°`;
 // Template variables can't contain newlines, tabs or 4+ spaces in a row.
 const clean = (s) => String(s).replace(/[\n\t]+/g, " ").replace(/ {4,}/g, "   ").trim();
 
+// WhatsApp's template text is fixed (changing it means a new Meta review), but its variables
+// can carry emoji — so the colour comes from them: a mood emoji after the difference, and the
+// rain status leading the one-liner. Variables can't hold line breaks, hence " · ".
+const MOOD_EMOJI = (d) => (d > 6 ? "🔥" : d > 2 ? "☀️" : d >= -2 ? "👌" : d > -6 ? "🧥" : "🥶");
+function rainLine(lang, mm) {
+  const amount = `${(mm ?? 0).toFixed(1).replace(".", lang === "en" ? "." : ",")} mm`;
+  if ((mm ?? 0) < 0.1) return lang === "en" ? "🌂 No rain" : "🌂 Sin lluvia";
+  if (mm < 1) return lang === "en" ? "🌦️ A bit of rain" : "🌦️ Algo de lluvia";
+  return lang === "en" ? `🌧️ Rain (${amount})` : `🌧️ Lluvia (${amount})`;
+}
+
 async function buildMessage(place, src = "wa") {
   const loc = { name: place.city, lat: place.lat, lon: place.lon };
   const forecast = await fetchForecast(loc);
@@ -77,6 +89,9 @@ async function buildMessage(place, src = "wa") {
   return {
     date: forecast.today,
     body: [place.city, signed(delta), deg(weather.max), deg(stats.avgMax), sentence].map(clean),
+    // The same five template variables, dressed up for WhatsApp.
+    waBody: [place.city, `${signed(delta)} ${MOOD_EMOJI(delta)}`, deg(weather.max), deg(stats.avgMax),
+             `${rainLine(place.lang, weather.rain)} · ${sentence}`].map(clean),
     rainMM: weather.rain ?? 0,
     urlSuffix: query.toString(),
   };
@@ -84,7 +99,7 @@ async function buildMessage(place, src = "wa") {
 
 // What the approved template will render, as plain text — for text_preview only.
 function previewText(lang, msg) {
-  const [city, delta, max, normal, sentence] = msg.body;
+  const [city, delta, max, normal, sentence] = msg.waBody;
   const url = WEB_BASE + msg.urlSuffix;
   return lang === "en"
     ? `Good morning. Today in ${city}: ${delta} vs normal (high ${max}, usually ${normal}).\n\n${sentence}\n\nSee details: ${url}\n\n(test preview)`
@@ -104,7 +119,7 @@ function payload(to, lang, msg) {
       name: TEMPLATE,
       language: { code: lang },
       components: [
-        { type: "body", parameters: msg.body.map((text) => ({ type: "text", text })) },
+        { type: "body", parameters: msg.waBody.map((text) => ({ type: "text", text })) },
         { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: msg.urlSuffix }] },
       ],
     },
@@ -246,7 +261,7 @@ async function main() {
       if (!messages.has(key)) messages.set(key, await buildMessage(r));
       const msg = messages.get(key);
       if (mode === "dry_run") {
-        console.log(`[dry run] to ${mask(r.to)} (${r.city}, ${msg.date}):`, JSON.stringify(msg.body), msg.urlSuffix);
+        console.log(`[dry run] to ${mask(r.to)} (${r.city}, ${msg.date}):`, JSON.stringify(msg.waBody), msg.urlSuffix);
       } else {
         const id = await send(r.to, r.lang, msg);
         console.log(`sent to ${mask(r.to)} (${r.city}) → ${id}`);

@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "dry_run = print only · push_only = Web Push only · hello_world = Meta's sample · text_preview = today's WhatsApp as text (only if you wrote to the test number in the last 24 h) · template = the real message (WhatsApp + push) · scheduled = the daily send, once a day (used by the Cloudflare clock)"
+        description: "dry_run = print only · push_only = Web Push only · wa_only = WhatsApp only · hello_world = Meta's sample · text_preview = today's WhatsApp as text (only if you wrote to the test number in the last 24 h) · template = the real message (WhatsApp + push) · scheduled = the daily send, once a day (used by the Cloudflare clock)"
         type: choice
-        options: [dry_run, push_only, hello_world, text_preview, template, scheduled]
+        options: [dry_run, push_only, wa_only, hello_world, text_preview, template, scheduled]
         default: dry_run
 
 # Never two runs at once, so a slow run and the next one can't both send.
