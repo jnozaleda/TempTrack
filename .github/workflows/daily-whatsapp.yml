@@ -2,10 +2,10 @@ name: Daily WhatsApp summary
 
 on:
   schedule:
-    # 08:00 in Madrid: 06:00 UTC in summer, 07:00 UTC in winter. Both fire; the script keeps
-    # only the right one. GitHub may start scheduled runs a few minutes late.
-    - cron: "0 6 * * *"
-    - cron: "0 7 * * *"
+    # GitHub delays or skips scheduled runs when busy (worst on the hour), so this fires every
+    # 15 minutes from 05:07 to 07:52 UTC — 07:07–09:52 in Madrid in summer, 06:07–08:52 in
+    # winter. The script sends once, on the first run from 08:00 Madrid time; the rest no-op.
+    - cron: "7,22,37,52 5-7 * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -13,6 +13,11 @@ on:
         type: choice
         options: [dry_run, push_only, hello_world, text_preview, template]
         default: dry_run
+
+# Never two runs at once, so a slow run and the next one can't both send.
+concurrency:
+  group: daily-summary
+  cancel-in-progress: false
 
 jobs:
   send:
