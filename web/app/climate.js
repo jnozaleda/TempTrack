@@ -203,7 +203,7 @@ export async function loadWeek(loc, forecast) {
   const withDelta = days.map((d) => {
     const s = years[monthDay(d.date)];
     const stats = s ? computeStats(s.filter((y) => y.year < yearOf(d.date))) : null;
-    return { ...d, normalMax: stats?.avgMax ?? null, delta: stats && d.max != null ? d.max - stats.avgMax : null };
+    return { ...d, normalMax: stats?.avgMax ?? null, normalMin: stats?.avgMin ?? null, delta: stats && d.max != null ? d.max - stats.avgMax : null };
   });
   const deltas = withDelta.map((d) => d.delta).filter((v) => v != null);
   return {
@@ -214,28 +214,52 @@ export async function loadWeek(loc, forecast) {
   };
 }
 
-// ---------- Days above 35° this month vs the usual count by this day of the month ----------
-export async function loadHeat(loc, forecast) {
+// ---------- The month so far vs the same days of every year since BASELINE_START ----------
+// Same rules as loadMonthSummary in WeatherViewModel.swift. In the first days of a month
+// there's too little to judge, so the previous month is shown, closed. Past years' months are
+// cached per location + month (they never change).
+export const MONTH_MIN_DAYS = 5;
+const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+
+function percentile(xs, p) {
+  const s = [...xs].sort((a, b) => a - b);
+  if (!s.length) return 0;
+  const pos = p * (s.length - 1), lo = Math.floor(pos), hi = Math.min(lo + 1, s.length - 1);
+  return s[lo] + (s[hi] - s[lo]) * (pos - lo);
+}
+
+function running(values, n) {
+  let total = 0;
+  return values.slice(0, n).map((v) => (total += v ?? 0));
+}
+
+export async function loadMonth(loc, forecast) {
   const today = forecast.today;
-  const [y, m] = today.split("-").map(Number);
-  const start = `${today.slice(0, 7)}-01`;
+  const todayDay = Number(today.slice(8));
+  const isClosed = todayDay < MONTH_MIN_DAYS;
+  let [y, m] = today.split("-").map(Number);
+  if (isClosed) { m -= 1; if (m === 0) { m = 12; y -= 1; } }
+  const ym = `${y}-${String(m).padStart(2, "0")}`;
+  const start = `${ym}-01`;
   const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const end = `${today.slice(0, 7)}-${String(daysInMonth).padStart(2, "0")}`;
-  const currentDay = Number(today.slice(8));
+  const end = `${ym}-${String(daysInMonth).padStart(2, "0")}`;
+  const dayCount = isClosed ? daysInMonth : todayDay;
+  const last = isClosed ? end : today;
   const safeEnd = addDays(today, -7);
+  const empty = () => ({ max: Array(31).fill(null), min: Array(31).fill(null), rain: Array(31).fill(null) });
 
-  // This month so far: archive first, then the forecast (which covers the last week) on top.
-  const thisMonth = {};
-  for (const d of (await fetchArchiveWindows(loc, start, today, [0], safeEnd)) ?? []) if (d.max != null) thisMonth[d.date] = d.max;
-  for (const d of forecast.days) if (d.date >= start && d.date <= today && d.max != null) thisMonth[d.date] = d.max;
-  const count = Object.values(thisMonth).filter((t) => t >= HEAT_THRESHOLD).length;
-  const dots = Array.from({ length: daysInMonth }, (_, i) => {
-    if (i + 1 > currentDay) return null;
-    return (thisMonth[`${today.slice(0, 7)}-${String(i + 1).padStart(2, "0")}`] ?? -Infinity) >= HEAT_THRESHOLD;
-  });
+  // This year: archive first, then the forecast (which covers the last week) on top.
+  const current = empty();
+  const put = (d) => {
+    const i = Number(d.date.slice(8)) - 1;
+    if (d.max != null) current.max[i] = d.max;
+    if (d.min != null) current.min[i] = d.min;
+    if (d.rain != null) current.rain[i] = d.rain;
+  };
+  for (const d of (await fetchArchiveWindows(loc, start, last, [0], safeEnd)) ?? []) put(d);
+  for (const d of forecast.days) if (d.date >= start && d.date <= last) put(d);
 
-  // Past years' full month, cached per location + month (past months never change).
-  const cacheKey = `cc_heat_v1_${coordKey(loc)}_${String(m).padStart(2, "0")}`;
+  const cacheKey = `cc_month_v1_${coordKey(loc)}_${String(m).padStart(2, "0")}`;
   const byYear = store.get(cacheKey) ?? {};
   const pastYears = Array.from({ length: y - BASELINE_START }, (_, i) => BASELINE_START + i);
   const missing = pastYears.filter((yr) => !byYear[yr]);
@@ -245,14 +269,112 @@ export async function loadHeat(loc, forecast) {
       for (const d of fetched) {
         const yr = yearOf(d.date);
         if (yr === y || Number(d.date.slice(5, 7)) !== m) continue;
-        byYear[yr] ??= Array(31).fill(null);
-        byYear[yr][Number(d.date.slice(8)) - 1] = d.max;
+        byYear[yr] ??= empty();
+        const i = Number(d.date.slice(8)) - 1;
+        byYear[yr].max[i] = d.max; byYear[yr].min[i] = d.min; byYear[yr].rain[i] = d.rain;
       }
       store.set(cacheKey, byYear);
     }
   }
-  const counts = pastYears.filter((yr) => byYear[yr])
-    .map((yr) => byYear[yr].slice(0, currentDay).filter((t) => t != null && t >= HEAT_THRESHOLD).length);
-  const usual = counts.length ? avg(counts) : 0;
-  return { count, usual, dots, isUnusual: count - usual >= 3 };
+  const past = pastYears.map((yr) => byYear[yr]).filter(Boolean);
+  if (past.length < 10) return null;
+
+  // Temperature
+  const curMax = current.max.slice(0, dayCount).filter((v) => v != null);
+  if (curMax.length < dayCount - 2) return null;
+  const meanMax = mean(curMax);
+  const pastMeans = past.map((p) => mean(p.max.slice(0, dayCount).filter((v) => v != null))).filter((v) => v != null);
+  const normalMeanMax = mean(pastMeans);
+  const spread = Math.sqrt(pastMeans.reduce((a, v) => a + (v - normalMeanMax) ** 2, 0) / pastMeans.length);
+  const dailyDelta = Array.from({ length: daysInMonth }, (_, i) => {
+    if (i >= dayCount || current.max[i] == null) return null;
+    const normal = mean(past.map((p) => p.max[i]).filter((v) => v != null));
+    return normal == null ? null : current.max[i] - normal;
+  });
+
+  // Rain
+  const curRain = current.rain.slice(0, dayCount).map((v) => v ?? 0);
+  const rain = curRain.reduce((a, b) => a + b, 0);
+  const pastTotals = past.map((p) => p.rain.slice(0, dayCount).reduce((a, v) => a + (v ?? 0), 0));
+  const pastCum = past.map((p) => running(p.rain, daysInMonth));
+  const column = (i) => pastCum.map((c) => c[i]);
+  const wettestIdx = curRain.reduce((best, v, i) => (v > (curRain[best] ?? -1) ? i : best), 0);
+
+  return {
+    monthStart: start, daysInMonth, dayCount, isClosed, yearCount: past.length + 1,
+    meanMax, normalMeanMax, spread, delta: meanMax - normalMeanMax,
+    deviations: spread > 0 ? (meanMax - normalMeanMax) / spread : 0,
+    warmRank: 1 + pastMeans.filter((v) => v > meanMax).length,
+    dailyDelta,
+    rain, normalRain: mean(pastTotals) ?? 0,
+    rainLow: percentile(pastTotals, 0.25), rainHigh: percentile(pastTotals, 0.75),
+    wetRank: 1 + pastTotals.filter((v) => v > rain).length,
+    rainyDays: curRain.filter((v) => v >= 1).length,
+    normalRainyDays: mean(past.map((p) => p.rain.slice(0, dayCount).filter((v) => (v ?? 0) >= 1).length)) ?? 0,
+    wettestDay: curRain[wettestIdx] >= 1 ? wettestIdx + 1 : null,
+    wettestDayRain: curRain[wettestIdx] ?? 0,
+    cumulative: running(current.rain, dayCount),
+    normalCumulative: Array.from({ length: daysInMonth }, (_, i) => mean(column(i)) ?? 0),
+    lowCumulative: Array.from({ length: daysInMonth }, (_, i) => percentile(column(i), 0.25)),
+    highCumulative: Array.from({ length: daysInMonth }, (_, i) => percentile(column(i), 0.75)),
+  };
+}
+
+// ---------- This year so far, on its own (no comparison) ----------
+// About 21 archive "calls" the first time, then only the days added since. Recorded days are
+// cached per location + year; the last week comes from the forecast.
+export const TROPICAL_NIGHT = 20;
+
+export async function loadYear(loc, forecast) {
+  const today = forecast.today;
+  const year = yearOf(today);
+  const yearStart = `${year}-01-01`;
+  const safeEnd = addDays(today, -7);
+  const cacheKey = `cc_year_v1_${coordKey(loc)}_${year}`;
+  const days = store.get(cacheKey) ?? {};
+  const lastCached = Object.keys(days).sort().at(-1);
+  const from = lastCached ? addDays(lastCached, 1) : yearStart;
+  if (from <= safeEnd) {
+    try {
+      const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${loc.lat}&longitude=${loc.lon}` +
+                  `&start_date=${from}&end_date=${safeEnd}&daily=${DAILY}&timezone=auto`;
+      for (const d of parseDaily(await getJSON(url))) if (d.max != null) days[d.date] = [d.max, d.min, d.rain];
+      store.set(cacheKey, days);
+    } catch { /* show what's cached */ }
+  }
+  const all = { ...days };
+  for (const d of forecast.days) if (d.date >= yearStart && d.date <= today && d.max != null) all[d.date] = [d.max, d.min, d.rain];
+  const series = Object.keys(all).sort().map((date) => ({ date, max: all[date][0], min: all[date][1], rain: all[date][2] ?? 0 }));
+  if (series.length < 14) return null;
+
+  const months = [];
+  for (let m = 1; m <= 12; m++) {
+    const rows = series.filter((d) => Number(d.date.slice(5, 7)) === m);
+    if (!rows.length) continue;
+    months.push({ month: m, meanMax: mean(rows.map((d) => d.max)), meanMin: mean(rows.map((d) => d.min).filter((v) => v != null)),
+                  rain: rows.reduce((a, d) => a + d.rain, 0) });
+  }
+  const hottest = series.reduce((a, d) => (d.max > a.max ? d : a));
+  const withMin = series.filter((d) => d.min != null);
+  const coldest = withMin.reduce((a, d) => (d.min < a.min ? d : a), withMin[0]);
+  const hot = series.filter((d) => d.max >= HEAT_THRESHOLD);
+
+  // Longest run of days under 1 mm.
+  let best = null, runStart = null, run = 0;
+  for (const d of series) {
+    if (d.rain < 1) {
+      runStart ??= d.date; run += 1;
+      if (run > (best?.days ?? 0)) best = { days: run, start: runStart, end: d.date };
+    } else { runStart = null; run = 0; }
+  }
+
+  return {
+    year, lastDay: series.at(-1).date, months,
+    hottestDay: hottest.date, hottestTemp: hottest.max,
+    coldestNight: coldest?.date ?? null, coldestTemp: coldest?.min ?? 0,
+    hotDays: hot.length, firstHotDay: hot[0]?.date ?? null, lastHotDay: hot.at(-1)?.date ?? null,
+    tropicalNights: series.filter((d) => (d.min ?? -Infinity) >= TROPICAL_NIGHT).length,
+    rain: series.reduce((a, d) => a + d.rain, 0), rainyDays: series.filter((d) => d.rain >= 1).length,
+    dryStreak: best,
+  };
 }

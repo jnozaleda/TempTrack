@@ -18,6 +18,8 @@
   --much-colder: rgb(48, 87, 179);
   --past-hot: rgb(232, 161, 156);
   --past-cool: rgb(156, 189, 240);
+  --wet: rgb(31, 143, 176);
+  --dry: rgb(181, 133, 58);
 
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   color-scheme: light dark;
@@ -220,3 +222,43 @@ dialog#search::backdrop { background: rgba(0, 0, 0, 0.3); }
 .push .btn.secondary { background: var(--track); color: var(--text); }
 .push textarea { width: 100%; height: 76px; font: 11px ui-monospace, Menlo, monospace; padding: 8px; border-radius: 10px; border: 0.5px solid var(--hairline); background: var(--track); color: var(--text); resize: none; }
 .push .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
+/* Fact note under a card: one rule-based sentence, grey rule on the left */
+.note { margin: 12px 0 0; padding: 10px 0 0 10px; border-top: 0.5px solid var(--hairline); font-size: 13px; line-height: 1.45; position: relative; }
+.note::before { content: ""; position: absolute; left: 0; top: 13px; bottom: 2px; width: 2px; border-radius: 1px; background: var(--text-3); }
+
+/* Month so far */
+.month .sec { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); margin-bottom: 5px; }
+.month hr { border: 0; border-top: 0.5px solid var(--hairline); margin: 14px 0; }
+.kpi { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
+.kpi .n { font-size: 44px; font-weight: 850; letter-spacing: -1.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kpi .sub { font-size: 12px; color: var(--text-2); line-height: 1.4; }
+.lbl { font-size: 11px; font-weight: 600; color: var(--text-2); margin: 12px 0 6px; }
+.strip { display: flex; gap: 2.5px; }
+.strip i { flex: 1; height: 16px; border-radius: 3px; display: block; }
+.strip-axis { position: relative; display: flex; justify-content: space-between; font-size: 10px; color: var(--text-2); margin-top: 3px; }
+.strip-axis .mark { position: absolute; transform: translateX(-50%); font-weight: 600; }
+.rain-chart { position: relative; margin-top: 12px; }
+.rain-chart svg { width: 100%; height: 120px; display: block; overflow: visible; }
+.rain-chart .end-dot { position: absolute; width: 9px; height: 9px; margin: -4.5px; border-radius: 50%; background: var(--wet); }
+.rain-chart .end-label { position: absolute; margin: -22px -4px 0 0; font-size: 11px; font-weight: 700; color: var(--wet); white-space: nowrap; }
+.legend .sw.band { background: var(--normal); opacity: 0.25; border-radius: 2px; width: 14px; }
+.legend .dash.h { height: 0; width: 14px; border-left: 0; border-top: 1px dashed var(--text-2); vertical-align: middle; }
+
+/* Year so far: climograph + records */
+.climo { display: flex; margin-top: 4px; }
+.climo .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.climo .plot { position: relative; width: 100%; height: 124px; }
+.climo .plot .cap { position: absolute; left: 50%; width: 10px; margin-left: -5px; border-radius: 5px; display: block; }
+.climo .future .cap { background: var(--track); }
+.climo .plot b, .climo .plot small { position: absolute; left: 0; right: 0; text-align: center; font-size: 10px; line-height: 14px; }
+.climo .plot small { color: var(--text-2); }
+.climo .rainbar { height: 26px; display: flex; align-items: flex-end; }
+.climo .rainbar i { width: 10px; border-radius: 2px; background: var(--wet); display: block; }
+.climo .m { font-size: 10px; color: var(--text-2); }
+.legend .cap-sw { width: 6px; height: 12px; border-radius: 3px; background: var(--text-3); }
+.recs { display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; margin-top: 10px; }
+.rec { display: grid; grid-template-columns: 1fr auto; padding: 7px 0; border-bottom: 0.5px solid var(--hairline); }
+.rec span { font-size: 11.5px; color: var(--text-2); }
+.rec b { font-size: 14px; font-variant-numeric: tabular-nums; text-align: right; }
+.rec em { grid-column: 1 / 3; font-style: normal; font-size: 10.5px; color: var(--text-3); }

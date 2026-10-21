@@ -3,10 +3,11 @@
 // any city, date and language directly: ?c=Madrid&lat=40.4168&lon=-3.7038&d=2026-09-25&l=es
 
 import {
-  BASELINE_START, HEAT_THRESHOLD, fetchForecast, searchCities, loadDay, loadWeek, loadHeat,
-  trendDelta, monthDay, daysSinceEpoch, yearOf, addDays,
+  BASELINE_START, HEAT_THRESHOLD, TROPICAL_NIGHT, fetchForecast, searchCities, loadDay, loadWeek, loadMonth, loadYear,
+  daysSinceEpoch, yearOf, addDays,
 } from "./climate.js";
-import { dayLine, weekLine, trendLine } from "./phrases.js";
+import { dayLine } from "./phrases.js";
+import { monthNote, weekNote, weekDayNote, dateHistoryNote, rainWindNote, longTermNote } from "./facts.js";
 
 const APP_NAME = "TempCheck";
 // GoatCounter site code (the "xxx" in xxx.goatcounter.com). Empty = no analytics at all.
@@ -35,6 +36,27 @@ const T = {
     search: "Busca una ciudad", close: "Cerrar", noResults: "Sin resultados",
     footer: `Lo normal = la media de ese día desde ${BASELINE_START}.`, privacy: "Privacidad",
     title: "¿Es hoy un día normal?",
+    month: {
+      soFar: (m) => `${m} hasta hoy`, closed: (m) => `${m}, cerrado`, range: (a, b, m) => `${a}–${b} ${m} · desde ${BASELINE_START}`,
+      temperature: "Temperatura", rain: "Lluvia",
+      verdicts: ["Mucho más cálido de lo normal", "Más cálido de lo normal", "Dentro de lo normal", "Más fresco de lo normal", "Mucho más frío de lo normal"],
+      wetter: "Más lluvioso de lo normal", drier: "Más seco de lo normal", normal: "Dentro de lo normal",
+      avgHigh: (a, n) => `máxima media ${a} · normal ${n}`,
+      rank: { warm: (o, n) => (o ? `el ${o} más cálido de ${n}` : `el más cálido de ${n}`), cool: (o, n) => (o ? `el ${o} más fresco de ${n}` : `el más fresco de ${n}`),
+              wet: (o, n) => (o ? `el ${o} más lluvioso de ${n}` : `el más lluvioso de ${n}`), dry: (o, n) => (o ? `el ${o} más seco de ${n}` : `el más seco de ${n}`) },
+      ordinal: (n) => `${n}.º`,
+      eachDay: "Cada día frente a su normal", today: "hoy",
+      byNow: (v) => `normal ${v} a estas alturas`, normalMonth: (v) => `normal ${v}`,
+      usual: "lo habitual (la mitad de los años)", wholeMonth: (v) => `normal (mes entero: ${v})`,
+      rainyDays: "Días de lluvia", usually: (n) => `normalmente ${n}`, wettest: "Día más lluvioso", noRain: "aún sin lluvia",
+    },
+    year: {
+      soFar: (y) => `${y} hasta hoy`, lowHigh: "de la mínima a la máxima media", rainMonth: "lluvia del mes",
+      hottest: "Día más caluroso", coldest: "Noche más fría", hotDays: (n) => `Días de ${n}° o más`,
+      nights: (n) => `Noches de ${n}° o más`, tropical: "noches tropicales", rain: "Lluvia", onDays: (n) => `en ${n} días`,
+      dry: "Racha más larga sin llover", days: (n) => `${n} días`,
+    },
+    lowsChange: "Mínimas, años 80 → últimos 10", highsChange: "Máximas, años 80 → últimos 10",
     push: {
       title: "Aviso diario",
       pitch: (c) => `Recibe cada mañana a las 8:00 cómo viene el día en ${c} frente a lo normal.`,
@@ -68,6 +90,27 @@ const T = {
     search: "Search for a city", close: "Close", noResults: "No results",
     footer: `Normal = the average for that date since ${BASELINE_START}.`, privacy: "Privacy",
     title: "Is today unusual?",
+    month: {
+      soFar: (m) => `${m} so far`, closed: (m) => `${m}, complete`, range: (a, b, m) => `${a}–${b} ${m} · since ${BASELINE_START}`,
+      temperature: "Temperature", rain: "Rain",
+      verdicts: ["Much hotter than usual", "Hotter than usual", "About normal", "Cooler than usual", "Much colder than usual"],
+      wetter: "Wetter than usual", drier: "Drier than usual", normal: "About normal",
+      avgHigh: (a, n) => `average high ${a} · normal ${n}`,
+      rank: { warm: (o, n) => (o ? `${o} warmest of ${n}` : `The warmest of ${n}`), cool: (o, n) => (o ? `${o} coolest of ${n}` : `The coolest of ${n}`),
+              wet: (o, n) => (o ? `${o} wettest of ${n}` : `The wettest of ${n}`), dry: (o, n) => (o ? `${o} driest of ${n}` : `The driest of ${n}`) },
+      ordinal: (n) => n + ({ one: "st", two: "nd", few: "rd" }[new Intl.PluralRules("en", { type: "ordinal" }).select(n)] ?? "th"),
+      eachDay: "Each day vs its normal", today: "today",
+      byNow: (v) => `normal ${v} by now`, normalMonth: (v) => `normal ${v}`,
+      usual: "usual (half of all years)", wholeMonth: (v) => `normal (whole month: ${v})`,
+      rainyDays: "Rainy days", usually: (n) => `usually ${n}`, wettest: "Wettest day", noRain: "no rain yet",
+    },
+    year: {
+      soFar: (y) => `${y} so far`, lowHigh: "average low to high", rainMonth: "rain in the month",
+      hottest: "Hottest day", coldest: "Coldest night", hotDays: (n) => `Days of ${n}° or more`,
+      nights: (n) => `Nights of ${n}° or more`, tropical: "tropical nights", rain: "Rain", onDays: (n) => `on ${n} days`,
+      dry: "Longest dry spell", days: (n) => `${n} days`,
+    },
+    lowsChange: "Lows, 1980s → last 10 years", highsChange: "Highs, 1980s → last 10 years",
     push: {
       title: "Daily heads-up",
       pitch: (c) => `Get how the day compares with normal in ${c}, every morning at 8:00.`,
@@ -333,7 +376,7 @@ function chip(title, headline, detail) {
 }
 
 function heroCard(day) {
-  const { stats, weather, yearly } = day;
+  const { stats, weather } = day;
   const today = isToday();
   if (!stats) return `<section class="card error">${esc(t().noData)}</section>`;
 
@@ -347,14 +390,14 @@ function heroCard(day) {
 
   const delta = weather.max - stats.avgMax;
   const c = moodColor(delta);
-  // Forecast days get the day's one-liner (same as the week list); recorded past days get the
-  // 10-year trend for that date, since "grab a jumper" makes no sense for last March.
+  // The day's one-liner — the only joke on the page — for days with a forecast; recorded past
+  // days get none, since "grab a jumper" makes no sense for last March.
   const sentence = today || weather.isForecast
     ? dayLine(state.lang, {
         delta, rainMM: weather.rain, daySwing: weather.min != null ? weather.max - weather.min : null,
         windKmh: weather.wind, uvIndex: weather.uv,
       }, state.loc.name, daysSinceEpoch(day.date))
-    : (() => { const d = trendDelta(yearly); return d == null ? null : trendLine(state.lang, d, `${state.loc.name}-${monthDay(day.date)}`); })();
+    : null;
 
   const chips = [];
   if (weather.rain != null) {
@@ -381,22 +424,128 @@ function heroCard(day) {
   </section>`;
 }
 
-function heatCard(heat) {
-  const usual = Math.round(heat.usual);
-  const todayIdx = heat.dots.findLastIndex((d) => d !== null);
-  const month = fmt(state.forecast.today, { month: "long" });
-  const dots = heat.dots.map((d, i) =>
-    `<i class="${d === true ? "hot" : d === false ? "off" : "future"}${i === todayIdx ? " today" : ""}"></i>`).join("");
-  return `<section class="card">
-    <div class="card-head"><h2>🔥 ${esc(t().heatTitle(HEAT_THRESHOLD, month))}</h2></div>
-    <div class="heat-row"><span class="n">${heat.count}</span>
-      <span class="l">${esc(t().soFar)}<br><span class="muted">${esc(t().usualHeat(usual))}</span></span></div>
-    <div class="dots" aria-hidden="true">${dots}</div>
-    <div class="legend">
-      <span><i class="sw" style="background:var(--much-hotter)"></i>${esc(t().above(HEAT_THRESHOLD))}</span>
-      <span><i class="sw" style="background:var(--dot-off)"></i>${esc(t().not)}</span>
-      <span><i class="sw" style="border:1px dashed var(--text-3)"></i>${esc(t().toCome)}</span>
-    </div>
+// ---------- Month so far ----------
+const signed1 = (delta) => {
+  const r = Math.round(delta * 10) / 10;
+  return r === 0 ? "±0°" : `${r > 0 ? "+" : "−"}${num1(Math.abs(r))}°`;
+};
+const note = (text) => (text ? `<p class="note">${esc(text)}</p>` : "");
+const WET = "var(--wet)", DRY = "var(--dry)";
+
+// "14th warmest of 47" / "The 3rd coolest of 47" — counted from whichever end is closer.
+function rankText(rank, count, kind) {
+  const m = t().month;
+  const fromTop = rank <= (count + 1) / 2;
+  const pos = fromTop ? rank : count - rank + 1;
+  const f = m.rank[kind === "temp" ? (fromTop ? "warm" : "cool") : (fromTop ? "wet" : "dry")];
+  return f(pos === 1 ? null : m.ordinal(pos), count);
+}
+
+function rainChart(mo) {
+  const W = 320, H = 120, n = mo.daysInMonth;
+  const top = Math.max(...mo.highCumulative, ...mo.cumulative, 1) * 1.12;
+  const x = (day) => ((day - 1) / Math.max(n - 1, 1)) * W;
+  const y = (v) => H - (v / top) * H;
+  const band = mo.highCumulative.map((v, i) => `${x(i + 1).toFixed(1)},${y(v).toFixed(1)}`)
+    .concat(mo.lowCumulative.map((v, i) => `${x(i + 1).toFixed(1)},${y(v).toFixed(1)}`).reverse()).join(" ");
+  const normal = mo.normalCumulative.map((v, i) => `${x(i + 1).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const steps = mo.cumulative.flatMap((v, i) => (i ? [`${x(i + 1).toFixed(1)},${y(mo.cumulative[i - 1]).toFixed(1)}`] : []).concat(`${x(i + 1).toFixed(1)},${y(v).toFixed(1)}`)).join(" ");
+  const last = mo.cumulative.at(-1) ?? 0, lx = x(mo.cumulative.length), ly = y(last);
+  return `<div class="rain-chart" role="img" aria-label="${esc(t().month.usual)}">
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <polygon points="${band}" fill="var(--normal)" fill-opacity="0.14"/>
+      <polyline points="${normal}" fill="none" stroke="var(--normal-line)" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>
+      <polyline points="${steps}" fill="none" stroke="${WET}" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    </svg>
+    <span class="end-dot" style="left:${(lx / W) * 100}%;top:${(ly / H) * 100}%"></span>
+    <span class="end-label" style="right:${100 - (lx / W) * 100}%;top:${(ly / H) * 100}%">${Math.round(last)} mm</span>
+  </div>
+  <div class="ends"><span>1</span><span>${n}</span></div>
+  <div class="legend"><span><i class="sw band"></i>${esc(t().month.usual)}</span>
+    <span><i class="dash h"></i>${esc(t().month.wholeMonth(`${Math.round(mo.normalCumulative.at(-1) ?? 0)} mm`))}</span></div>`;
+}
+
+function monthCard(mo) {
+  const m = t().month;
+  const monthName = fmt(mo.monthStart, { month: "long" });
+  const name = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+  const z = mo.deviations;
+  const b = z > 2 ? 0 : z > 1 ? 1 : z >= -1 ? 2 : z > -2 ? 3 : 4;
+  const tc = ["var(--much-hotter)", "var(--hotter)", "var(--normal)", "var(--cooler)", "var(--much-colder)"][b];
+  const wet = mo.rain > mo.rainHigh && mo.rain >= 1, dry = mo.rain < mo.rainLow;
+  const rc = wet ? WET : dry ? DRY : "var(--normal)";
+  const strip = mo.dailyDelta.map((d) => `<i style="background:${d == null ? "var(--track)" : moodColor(d)}"></i>`).join("");
+  const todayMark = !mo.isClosed && mo.dayCount > 2 && mo.dayCount < mo.daysInMonth - 1
+    ? `<span class="mark" style="left:${((mo.dayCount - 0.5) / mo.daysInMonth) * 100}%">${esc(m.today)}</span>` : "";
+  const big = mo.normalRain >= 1 ? `${Math.round((mo.rain / mo.normalRain) * 100)}${state.lang === "es" ? " %" : "%"}` : mm(mo.rain);
+  const wettest = mo.wettestDay ? fmt(addDays(mo.monthStart, mo.wettestDay - 1), { day: "numeric", month: "short" }) : m.noRain;
+
+  return `<section class="card month">
+    <div class="card-head"><h2>${esc((mo.isClosed ? m.closed : m.soFar)(name))}</h2>
+      <span>${esc(m.range(1, mo.dayCount, fmt(mo.monthStart, { month: "short" })))}</span></div>
+    <div class="sec">${esc(m.temperature)}</div>
+    <div class="verdict"><i style="background:${tc}"></i>${esc(m.verdicts[b])}</div>
+    <div class="kpi"><span class="n" style="color:${tc}">${signed1(mo.delta)}</span>
+      <span class="sub">${esc(m.avgHigh(`${num1(mo.meanMax)}°`, `${num1(mo.normalMeanMax)}°`))}<br>${esc(rankText(mo.warmRank, mo.yearCount, "temp"))}</span></div>
+    <div class="lbl">${esc(m.eachDay)}</div>
+    <div class="strip" aria-hidden="true">${strip}</div>
+    <div class="strip-axis"><span>1</span>${todayMark}<span>${mo.daysInMonth}</span></div>
+    ${note(monthNote(state.lang, mo))}
+    <hr>
+    <div class="sec">${esc(m.rain)}</div>
+    <div class="verdict"><i style="background:${rc}"></i>${esc(wet ? m.wetter : dry ? m.drier : m.normal)}</div>
+    <div class="kpi"><span class="n" style="color:${rc}">${esc(big)}</span>
+      <span class="sub">${Math.round(mo.rain)} mm · ${esc((mo.isClosed ? m.normalMonth : m.byNow)(`${Math.round(mo.normalRain)} mm`))}<br>${esc(rankText(mo.wetRank, mo.yearCount, "rain"))}</span></div>
+    ${rainChart(mo)}
+    <div class="chips">${chip(m.rainyDays, String(mo.rainyDays), m.usually(Math.round(mo.normalRainyDays)))}${
+      chip(m.wettest, mo.wettestDay ? mm(mo.wettestDayRain) : "—", wettest)}</div>
+  </section>`;
+}
+
+// ---------- Year so far: climograph + records ----------
+// Absolute temperature → colour (blue cold, red hot), only where real temperatures are drawn.
+const STOPS = [[0, 47, 79, 168], [8, 59, 130, 245], [15, 141, 195, 217], [20, 226, 214, 160], [26, 232, 162, 62], [32, 217, 69, 59], [38, 142, 31, 31]];
+function tempColor(v) {
+  if (v <= STOPS[0][0]) return `rgb(${STOPS[0].slice(1)})`;
+  for (let i = 1; i < STOPS.length; i++) {
+    const [t1, ...c1] = STOPS[i], [t0, ...c0] = STOPS[i - 1];
+    if (v <= t1) { const f = (v - t0) / (t1 - t0); return `rgb(${c0.map((c, k) => Math.round(c + (c1[k] - c) * f))})`; }
+  }
+  return `rgb(${STOPS.at(-1).slice(1)})`;
+}
+
+function yearCard(yr) {
+  const y = t().year;
+  const lo = Math.min(...yr.months.map((m) => m.meanMin)) - 1, hi = Math.max(...yr.months.map((m) => m.meanMax)) + 1;
+  const maxRain = Math.max(...yr.months.map((m) => m.rain), 1);
+  const H = 124, inset = 15;
+  const py = (v) => inset + ((hi - v) / Math.max(hi - lo, 1)) * (H - 2 * inset);
+  const letters = Array.from({ length: 12 }, (_, i) => fmt(`2026-${String(i + 1).padStart(2, "0")}-15`, { month: "narrow" }));
+  const cols = letters.map((letter, i) => {
+    const mo = yr.months.find((x) => x.month === i + 1);
+    if (!mo) return `<div class="col future"><div class="plot"><i class="cap" style="top:${H / 2 - 22}px;height:44px"></i></div><div class="rainbar"></div><span class="m">${esc(letter)}</span></div>`;
+    const top = py(mo.meanMax), bottom = py(mo.meanMin);
+    return `<div class="col"><div class="plot">
+        <b style="top:${top - 16}px">${Math.round(mo.meanMax)}</b>
+        <i class="cap" style="top:${top}px;height:${Math.max(bottom - top, 10)}px;background:${tempColor((mo.meanMax + mo.meanMin) / 2)}"></i>
+        <small style="top:${bottom + 2}px">${Math.round(mo.meanMin)}</small></div>
+      <div class="rainbar"><i style="height:${Math.max(1.5, (26 * mo.rain) / maxRain)}px"></i></div>
+      <span class="m">${esc(letter)}</span></div>`;
+  }).join("");
+  const d = (s) => (s ? fmt(s, { day: "numeric", month: "short" }) : "");
+  const rows = [
+    [y.hottest, `${num1(yr.hottestTemp)}°`, d(yr.hottestDay)],
+    [y.coldest, `${num1(yr.coldestTemp).replace("-", "−")}°`, d(yr.coldestNight)],
+    [y.hotDays(HEAT_THRESHOLD), String(yr.hotDays), yr.firstHotDay ? `${d(yr.firstHotDay)} – ${d(yr.lastHotDay)}` : ""],
+    [y.nights(TROPICAL_NIGHT), String(yr.tropicalNights), y.tropical],
+    [y.rain, `${Math.round(yr.rain)} mm`, y.onDays(yr.rainyDays)],
+    [y.dry, y.days(yr.dryStreak?.days ?? 0), yr.dryStreak ? `${d(yr.dryStreak.start)} – ${d(yr.dryStreak.end)}` : ""],
+  ].map(([a, b, c]) => `<div class="rec"><span>${esc(a)}</span><b>${esc(b)}</b><em>${esc(c)}</em></div>`).join("");
+  return `<section class="card year">
+    <div class="card-head"><h2>${esc(y.soFar(yr.year))}</h2><span>${esc(`${d(`${yr.year}-01-01`)} – ${d(yr.lastDay)}`)}</span></div>
+    <div class="climo" role="img" aria-label="${esc(y.lowHigh)}">${cols}</div>
+    <div class="legend"><span><i class="sw cap-sw"></i>${esc(y.lowHigh)}</span><span><i class="sw" style="background:${WET};border-radius:2px"></i>${esc(y.rainMonth)}</span></div>
+    <div class="recs">${rows}</div>
   </section>`;
 }
 
@@ -422,6 +571,7 @@ function rangesCard(day) {
     <div class="card-head"><h2>${esc(t().every(fmt(day.date, { day: "numeric", month: "short" })))}</h2><span>${esc(t().last10)}</span></div>
     <div class="ranges">${rows}</div>
     ${stats ? `<div class="legend"><span><i class="dash"></i>${esc(t().normalSince)}</span></div>` : ""}
+    ${note(dateHistoryNote(state.lang, yearly.find((y) => y.isCurrent), yearly.filter((y) => !y.isCurrent), day.longTerm, stats?.avgMin))}
   </section>`;
 }
 
@@ -446,6 +596,7 @@ function rainWindCard(day) {
       ${miniColumns(t().wind, yearly, "wind", stats?.avgWind, "#30b0c7", 10)}
     </div>
     <div class="ends"><span>${yearly[0]?.year ?? ""}</span><span>${esc(isToday() ? t().todayCaps : yearly.at(-1)?.year ?? "")}</span></div>
+    ${note(rainWindNote(state.lang, yearly.find((y) => y.isCurrent), yearly.filter((y) => !y.isCurrent), stats?.avgWind, mm))}
   </section>`;
 }
 
@@ -471,10 +622,10 @@ function longTermCard(day) {
   const lastYear = years.at(-1).year;
   const hiFrom = avgIn("max", 1980, 1989), hiTo = avgIn("max", lastYear - 9, lastYear);
   const loFrom = avgIn("min", 1980, 1989), loTo = avgIn("min", lastYear - 9, lastYear);
-  const compare = hiFrom != null && hiTo != null && loFrom != null && loTo != null
-    ? `<p class="compare"><span style="color:var(--much-hotter)">${esc(t().compareHigh)}</span> ${num1(hiFrom)}° → ${num1(hiTo)}° ·
-       <span style="color:var(--cooler)">${esc(t().compareLow)}</span> ${num1(loFrom)}° → ${num1(loTo)}°
-       <span class="muted">${esc(t().compare)}</span></p>` : "";
+  const ok = hiFrom != null && hiTo != null && loFrom != null && loTo != null;
+  const compare = ok
+    ? `<div class="chips" style="margin:0 0 10px">${chip(t().lowsChange, signed1(loTo - loFrom), `${num1(loFrom)}° → ${num1(loTo)}°`)}${
+        chip(t().highsChange, signed1(hiTo - hiFrom), `${num1(hiFrom)}° → ${num1(hiTo)}°`)}</div>` : "";
 
   return `<section class="card longterm">
     <div class="card-head"><h2>${esc(t().since(BASELINE_START))}</h2><span>${esc(t().sameDay)}</span></div>
@@ -487,6 +638,7 @@ function longTermCard(day) {
       ${current ? dot(current.max, "var(--much-hotter)") + dot(current.min, "var(--cooler)") : ""}
     </div>
     <div class="ends"><span>${first}</span><span>${esc(isToday() ? t().todayLower : String(current?.year ?? last))}</span></div>
+    ${ok ? note(longTermNote(state.lang, hiTo - hiFrom, loTo - loFrom)) : ""}
   </section>`;
 }
 
@@ -504,34 +656,39 @@ function weekHero(week) {
   }).join("");
   const initials = week.days.map((x) =>
     `<span class="${x.date === today ? "today" : ""}">${esc(fmt(x.date, { weekday: "narrow" }))}</span>`).join("");
-  const line = weekLine(state.lang, d, week.anyRain, week.anyBigSwing, `${state.loc.name}-${today}`);
+  const line = weekNote(state.lang,
+    week.days.filter((x) => x.date < today).map((x) => ({ day: Number(x.date.slice(8)), delta: x.delta })),
+    week.days.filter((x) => x.date >= today).map((x) => ({ delta: x.delta, rain: x.rain })));
 
   return `<section class="card hero">
     <div class="verdict"><i style="background:${c}"></i>${esc(verdict(d))}</div>
     <div class="hero-row"><div class="hero-number" style="color:${c}">${signed(d)}</div><div class="aside">${t().avgFortnight}</div></div>
-    <p class="sentence">${esc(line)}</p>
     <div class="anomaly" role="img" aria-label="${esc(t().eachBar)}">
       <div class="bars">${slots}</div>
       <div class="initials">${initials}</div>
       <div class="ends"><span>${esc(t().last7)}</span><span>${esc(t().next7)}</span></div>
     </div>
     <p class="small muted" style="margin:6px 0 0">${esc(t().eachBar)}</p>
+    ${note(line)}
   </section>`;
 }
 
 function weekList(week) {
   const today = state.forecast.today;
-  const rows = week.days.filter((x) => x.date >= today).map((x) => {
-    const line = x.max != null && x.normalMax != null ? dayLine(state.lang, {
-      delta: x.delta, rainMM: x.rain, daySwing: x.min != null ? x.max - x.min : null, windKmh: x.wind, uvIndex: x.uv,
-    }, state.loc.name, daysSinceEpoch(x.date)) : "";
-    const details = [`${x.max != null ? deg(x.max) : "—"} / ${x.min != null ? deg(x.min) : "—"}`];
-    if ((x.rain ?? 0) >= 0.1) details.push(`💧 ${mm(x.rain)}`);
+  const upcoming = week.days.filter((x) => x.date >= today);
+  const deltas = upcoming.map((x) => x.delta).filter((v) => v != null);
+  const warmest = Math.max(...deltas), coolest = Math.min(...deltas);
+  const rows = upcoming.map((x) => {
+    const line = weekDayNote(state.lang, {
+      rain: x.rain, delta: x.delta, min: x.min,
+      nightDelta: x.min != null && x.normalMin != null ? x.min - x.normalMin : null,
+      isWarmest: x.delta != null && x.delta === warmest, isCoolest: x.delta != null && x.delta === coolest,
+    }, mm) ?? "";
     return `<button type="button" class="day-row" data-date="${x.date}">
       <span class="when"><small class="${x.date === today ? "is-today" : ""}">${esc(x.date === today ? t().todayCaps : fmt(x.date, { weekday: "short" }))}</small>
         <b>${Number(x.date.slice(8))}</b></span>
       <span class="dd" style="color:${x.delta != null ? moodColor(x.delta) : "var(--text-2)"}">${x.delta != null ? signed(x.delta) : "—"}</span>
-      <span class="txt"><p>${esc(line)}</p><span>${esc(details.join(" · "))}</span></span>
+      <span class="txt"><p>${x.max != null ? deg(x.max) : "—"} / ${x.min != null ? deg(x.min) : "—"}</p>${line ? `<span>${esc(line)}</span>` : ""}</span>
       <span class="chev" aria-hidden="true">›</span>
     </button>`;
   }).join("");
@@ -541,7 +698,7 @@ function weekList(week) {
 // ---------- Loading + rendering ----------
 const main = $("main");
 const errorCard = () => `<section class="card error">${esc(t().error)}<br><button type="button" id="retry">${esc(t().retry)}</button></section>`;
-const memo = { day: new Map(), week: null, heat: null };
+const memo = { day: new Map(), week: null, month: undefined, year: undefined };
 
 async function ensureForecast(token) {
   if (state.forecast) return true;
@@ -579,15 +736,20 @@ async function renderDay(token) {
   if (token !== state.token) return;
   const draw = () => {
     main.innerHTML = heroCard(day)
-      + (isToday() && memo.heat?.isUnusual ? heatCard(memo.heat) : "")
+      + (isToday() && memo.month ? monthCard(memo.month) : "")
+      + (isToday() && memo.year ? yearCard(memo.year) : "")
       + (day.yearly.length ? rangesCard(day) + rainWindCard(day) : "")
       + longTermCard(day);
   };
   draw();
-  // The heat streak is today-only and loads after the main content (a month of every year).
-  if (isToday() && !memo.heat) {
-    try { memo.heat = await loadHeat(state.loc, state.forecast); } catch { return; }
-    if (token === state.token && memo.heat.isUnusual) draw();
+  // Month and year are today-only and load after the main content.
+  if (isToday() && (memo.month === undefined || memo.year === undefined)) {
+    const [month, year] = await Promise.all([
+      memo.month === undefined ? loadMonth(state.loc, state.forecast).catch(() => null) : memo.month,
+      memo.year === undefined ? loadYear(state.loc, state.forecast).catch(() => null) : memo.year,
+    ]);
+    memo.month = month; memo.year = year;
+    if (token === state.token && (month || year)) draw();
   }
 }
 
@@ -602,7 +764,7 @@ function setLocation(loc) {
   state.loc = loc;
   state.date = null;
   state.forecast = null;
-  memo.day.clear(); memo.week = null; memo.heat = null;
+  memo.day.clear(); memo.week = null; memo.month = undefined; memo.year = undefined;
   store.set("cc_loc", loc);
   trackEvent("city-change", loc.name);
   syncUrl();
