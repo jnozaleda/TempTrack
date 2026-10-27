@@ -532,6 +532,13 @@ function yearCard(yr) {
       <div class="rainbar"><i style="height:${Math.max(1.5, (26 * mo.rain) / maxRain)}px"></i></div>
       <span class="m">${esc(letter)}</span></div>`;
   }).join("");
+  // Scale every 10° and a line at today, so the bars can be read and past and future told apart.
+  const grid = [];
+  for (let v = Math.ceil(lo / 10) * 10; v <= hi; v += 10) grid.push(v);
+  const lines = grid.map((v) => `<span class="gl" style="top:${py(v)}px"><em>${v}°</em></span>`).join("");
+  const [, lm, ld] = yr.lastDay.split("-").map(Number);
+  const share = (lm - 1 + (ld - 0.5) / new Date(Date.UTC(yr.year, lm, 0)).getUTCDate()) / 12;
+  const now = `<span class="now" style="left:calc(var(--axis) + (100% - var(--axis)) * ${share.toFixed(4)})"><em>${esc(t().month.today)}</em></span>`;
   const d = (s) => (s ? fmt(s, { day: "numeric", month: "short" }) : "");
   const rows = [
     [y.hottest, `${num1(yr.hottestTemp)}°`, d(yr.hottestDay)],
@@ -543,7 +550,7 @@ function yearCard(yr) {
   ].map(([a, b, c]) => `<div class="rec"><span>${esc(a)}</span><b>${esc(b)}</b><em>${esc(c)}</em></div>`).join("");
   return `<section class="card year">
     <div class="card-head"><h2>${esc(y.soFar(yr.year))}</h2><span>${esc(`${d(`${yr.year}-01-01`)} – ${d(yr.lastDay)}`)}</span></div>
-    <div class="climo" role="img" aria-label="${esc(y.lowHigh)}">${cols}</div>
+    <div class="climo-wrap">${lines}${now}<div class="climo" role="img" aria-label="${esc(y.lowHigh)}">${cols}</div></div>
     <div class="legend"><span><i class="sw cap-sw"></i>${esc(y.lowHigh)}</span><span><i class="sw" style="background:${WET};border-radius:2px"></i>${esc(y.rainMonth)}</span></div>
     <div class="recs">${rows}</div>
   </section>`;
