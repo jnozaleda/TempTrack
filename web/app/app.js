@@ -603,11 +603,15 @@ function miniColumns(title, rows, field, normal, color, minScale) {
   const top = Math.max(...vals, normal ?? 0, minScale) * 1.1;
   const cols = rows.map((r, i) => {
     const v = vals[i];
-    const h = v > 0 ? Math.max(2, (v / top) * 60) : 0;
+    const h = v > 0 ? Math.max(2, (v / top) * 72) : 0;
     return `<i style="height:${h}px;background:${color};opacity:${r.isCurrent ? 1 : 0.5}"></i>`;
   }).join("");
-  const norm = normal != null ? `<span class="norm" style="bottom:${(normal / top) * 60}px"></span>` : "";
-  return `<div class="mini"><div class="t">${esc(title)}</div><div class="cols">${cols}${norm}</div></div>`;
+  const norm = normal != null ? `<span class="norm" style="bottom:${(normal / top) * 72}px"></span>` : "";
+  // 2–4 scale lines, numbers on the left (the unit is in the title).
+  const step = [1, 2, 5, 10, 20, 25, 50, 100].find((st) => top / st <= 4) ?? 200;
+  const grid = [];
+  for (let v = step; v < top; v += step) grid.push(`<span class="gl" style="bottom:${(v / top) * 72}px"><em>${v}</em></span>`);
+  return `<div class="mini"><div class="t">${esc(title)}</div><div class="cols">${grid.join("")}${cols}${norm}</div></div>`;
 }
 
 function rainWindCard(day) {
@@ -615,10 +619,10 @@ function rainWindCard(day) {
   return `<section class="card">
     <div class="card-head"><h2>${esc(t().rainWind)}</h2><span>${esc(t().last10)}</span></div>
     <div class="minis">
-      ${miniColumns(t().rain, yearly, "rain", stats?.avgRain, "var(--cooler)", 2)}
-      ${miniColumns(t().wind, yearly, "wind", stats?.avgWind, "#30b0c7", 10)}
+      ${miniColumns(`${t().rain} (mm)`, yearly, "rain", stats?.avgRain, "var(--cooler)", 2)}
+      ${miniColumns(`${t().wind} (km/h)`, yearly, "wind", stats?.avgWind, "#30b0c7", 10)}
     </div>
-    <div class="ends"><span>${yearly[0]?.year ?? ""}</span><span>${esc(isToday() ? t().todayCaps : yearly.at(-1)?.year ?? "")}</span></div>
+    <div class="ends mini-ends"><span>${yearly[0]?.year ?? ""}</span><span>${esc(isToday() ? t().todayCaps : yearly.at(-1)?.year ?? "")}</span></div>
     ${note(rainWindNote(state.lang, yearly.find((y) => y.isCurrent), yearly.filter((y) => !y.isCurrent), stats?.avgWind, mm))}
   </section>`;
 }

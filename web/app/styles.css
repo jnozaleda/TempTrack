@@ -137,7 +137,10 @@ main { display: flex; flex-direction: column; gap: 10px; }
 .minis { display: flex; gap: 14px; }
 .mini { flex: 1; min-width: 0; }
 .mini .t { font-size: 11px; color: var(--text-2); margin-bottom: 4px; }
-.mini .cols { position: relative; height: 60px; display: flex; align-items: flex-end; gap: 3px; }
+.mini .cols { position: relative; height: 72px; display: flex; align-items: flex-end; gap: 3px; margin: 12px 0 0 22px; }
+.mini .cols .gl { position: absolute; left: 0; right: 0; border-top: 0.5px solid var(--hairline); }
+.mini .cols .gl em { position: absolute; left: -22px; top: -7px; font-size: 9.5px; font-style: normal; color: var(--text-3); }
+.mini-ends { padding-left: 22px; }
 .mini .cols i { flex: 1; border-radius: 2px; display: block; }
 .mini .cols .norm { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--normal-line); }
 .ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-2); margin-top: 6px; }
