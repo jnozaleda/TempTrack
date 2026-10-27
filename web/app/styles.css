@@ -251,10 +251,10 @@ dialog#search::backdrop { background: rgba(0, 0, 0, 0.3); }
 .legend .dash.h { height: 0; width: 14px; border-left: 0; border-top: 1px dashed var(--text-2); vertical-align: middle; }
 
 /* Year so far: climograph + records */
-.climo-wrap { --axis: 24px; position: relative; padding-left: var(--axis); margin-top: 22px; }
+.climo-wrap { --axis: 38px; position: relative; padding-left: var(--axis); margin-top: 22px; }
 .climo-wrap .gl { position: absolute; left: var(--axis); right: 0; border-top: 0.5px solid var(--hairline); }
-.climo-wrap .gl em { position: absolute; left: calc(-1 * var(--axis)); top: -7px; font-size: 9.5px; font-style: normal; color: var(--text-3); }
-.climo-wrap .now { position: absolute; top: 0; height: 153px; border-left: 1px dashed var(--text-2); }
+.climo-wrap .gl em { position: absolute; left: calc(-1 * var(--axis)); top: -7px; font-size: 9.5px; font-style: normal; color: var(--text-3); white-space: nowrap; }
+.climo-wrap .now { position: absolute; top: 0; height: 179px; border-left: 1px dashed var(--text-2); }
 .climo-wrap .now em { position: absolute; top: -13px; transform: translateX(-50%); font-size: 9.5px; font-style: normal; font-weight: 600; color: var(--text-2); }
 .climo { display: flex; position: relative; }
 .climo .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
@@ -263,7 +263,7 @@ dialog#search::backdrop { background: rgba(0, 0, 0, 0.3); }
 .climo .future .cap { background: var(--track); }
 .climo .plot b, .climo .plot small { position: absolute; left: 0; right: 0; text-align: center; font-size: 10px; line-height: 14px; }
 .climo .plot small { color: var(--text-2); }
-.climo .rainbar { height: 26px; display: flex; align-items: flex-end; }
+.climo .rainbar { height: 52px; position: relative; display: flex; align-items: flex-end; }
 .climo .rainbar i { width: 10px; border-radius: 2px; background: var(--wet); display: block; }
 .climo .m { font-size: 10px; color: var(--text-2); }
 .legend .cap-sw { width: 6px; height: 12px; border-radius: 3px; background: var(--text-3); }

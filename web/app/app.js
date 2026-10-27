@@ -527,8 +527,11 @@ function tempColor(v) {
 function yearCard(yr) {
   const y = t().year;
   const lo = Math.min(...yr.months.map((m) => m.meanMin)) - 1, hi = Math.max(...yr.months.map((m) => m.meanMax)) + 1;
-  const maxRain = Math.max(...yr.months.map((m) => m.rain), 1);
-  const H = 124, inset = 15;
+  const H = 124, inset = 15, RH = 52;
+  // Rain gets its own scale under the temperatures: a line every 10/20/25/50/100 mm (2–3 lines).
+  const rainStep = [10, 20, 25, 50, 100, 200, 500].find((st) => Math.max(...yr.months.map((m) => m.rain), 1) / st <= 3);
+  const maxRain = Math.max(...yr.months.map((m) => m.rain), rainStep);
+  const ry = (v) => H + 3 + RH - (v / maxRain) * RH;
   const py = (v) => inset + ((hi - v) / Math.max(hi - lo, 1)) * (H - 2 * inset);
   const letters = Array.from({ length: 12 }, (_, i) => fmt(`2026-${String(i + 1).padStart(2, "0")}-15`, { month: "narrow" }));
   const cols = letters.map((letter, i) => {
@@ -539,13 +542,16 @@ function yearCard(yr) {
         <b style="top:${top - 16}px">${Math.round(mo.meanMax)}</b>
         <i class="cap" style="top:${top}px;height:${Math.max(bottom - top, 10)}px;background:${tempColor((mo.meanMax + mo.meanMin) / 2)}"></i>
         <small style="top:${bottom + 2}px">${Math.round(mo.meanMin)}</small></div>
-      <div class="rainbar"><i style="height:${Math.max(1.5, (26 * mo.rain) / maxRain)}px"></i></div>
+      <div class="rainbar"><i style="height:${Math.max(1.5, (RH * mo.rain) / maxRain)}px"></i></div>
       <span class="m">${esc(letter)}</span></div>`;
   }).join("");
   // Scale every 10° and a line at today, so the bars can be read and past and future told apart.
   const grid = [];
   for (let v = Math.ceil(lo / 10) * 10; v <= hi; v += 10) grid.push(v);
-  const lines = grid.map((v) => `<span class="gl" style="top:${py(v)}px"><em>${v}°</em></span>`).join("");
+  const rainGrid = [];
+  for (let v = rainStep; v <= maxRain; v += rainStep) rainGrid.push(v);
+  const lines = grid.map((v) => `<span class="gl" style="top:${py(v)}px"><em>${v}°</em></span>`).join("")
+    + rainGrid.map((v) => `<span class="gl" style="top:${ry(v)}px"><em>${v} mm</em></span>`).join("");
   const [, lm, ld] = yr.lastDay.split("-").map(Number);
   const share = (lm - 1 + (ld - 0.5) / new Date(Date.UTC(yr.year, lm, 0)).getUTCDate()) / 12;
   const now = `<span class="now" style="left:calc(var(--axis) + (100% - var(--axis)) * ${share.toFixed(4)})"><em>${esc(t().month.today)}</em></span>`;
