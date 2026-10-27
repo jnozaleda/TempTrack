@@ -451,16 +451,26 @@ function rainChart(mo) {
   const normal = mo.normalCumulative.map((v, i) => `${x(i + 1).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const steps = mo.cumulative.flatMap((v, i) => (i ? [`${x(i + 1).toFixed(1)},${y(mo.cumulative[i - 1]).toFixed(1)}`] : []).concat(`${x(i + 1).toFixed(1)},${y(v).toFixed(1)}`)).join(" ");
   const last = mo.cumulative.at(-1) ?? 0, lx = x(mo.cumulative.length), ly = y(last);
+  // A scale line every few mm (step picked so there are 2–4 lines) and, for the month in
+  // progress, a dashed line at today.
+  const step = [5, 10, 20, 25, 50, 100, 200].find((st) => top / st <= 4) ?? 500;
+  const grid = [];
+  for (let v = step; v < top; v += step) grid.push(v);
+  const lines = grid.map((v) => `<span class="gl" style="top:${(y(v) / H) * 100}%"><em>${v} mm</em></span>`).join("");
+  const at = (f) => `calc(var(--axis) + (100% - var(--axis)) * ${f.toFixed(4)})`;
+  const today = mo.isClosed ? "" : `<span class="now" style="left:${at(lx / W)}"></span>`;
+  const todayLabel = mo.isClosed ? "" : `<span class="mark" style="left:${at(lx / W)}">${esc(t().month.today)}</span>`;
   return `<div class="rain-chart" role="img" aria-label="${esc(t().month.usual)}">
+    ${lines}${today}
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
       <polygon points="${band}" fill="var(--normal)" fill-opacity="0.14"/>
       <polyline points="${normal}" fill="none" stroke="var(--normal-line)" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>
       <polyline points="${steps}" fill="none" stroke="${WET}" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
     </svg>
-    <span class="end-dot" style="left:${(lx / W) * 100}%;top:${(ly / H) * 100}%"></span>
-    <span class="end-label" style="right:${100 - (lx / W) * 100}%;top:${(ly / H) * 100}%">${Math.round(last)} mm</span>
+    <span class="end-dot" style="left:${at(lx / W)};top:${(ly / H) * 100}%"></span>
+    <span class="end-label" style="right:calc((100% - var(--axis)) * ${(1 - lx / W).toFixed(4)});top:${(ly / H) * 100}%">${Math.round(last)} mm</span>
   </div>
-  <div class="ends"><span>1</span><span>${n}</span></div>
+  <div class="strip-axis rain-axis"><span>1</span>${todayLabel}<span>${n}</span></div>
   <div class="legend"><span><i class="sw band"></i>${esc(t().month.usual)}</span>
     <span><i class="dash h"></i>${esc(t().month.wholeMonth(`${Math.round(mo.normalCumulative.at(-1) ?? 0)} mm`))}</span></div>`;
 }

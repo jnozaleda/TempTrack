@@ -238,8 +238,13 @@ dialog#search::backdrop { background: rgba(0, 0, 0, 0.3); }
 .strip i { flex: 1; height: 16px; border-radius: 3px; display: block; }
 .strip-axis { position: relative; display: flex; justify-content: space-between; font-size: 10px; color: var(--text-2); margin-top: 3px; }
 .strip-axis .mark { position: absolute; transform: translateX(-50%); font-weight: 600; }
-.rain-chart { position: relative; margin-top: 12px; }
-.rain-chart svg { width: 100%; height: 120px; display: block; overflow: visible; }
+.rain-chart { --axis: 34px; position: relative; margin-top: 12px; padding-left: var(--axis); }
+.rain-axis { --axis: 34px; padding-left: var(--axis); }
+.rain-axis .mark { margin-left: 0; }
+.rain-chart svg { width: 100%; height: 120px; display: block; overflow: visible; position: relative; }
+.rain-chart .gl { position: absolute; left: var(--axis); right: 0; border-top: 0.5px solid var(--hairline); }
+.rain-chart .gl em { position: absolute; left: calc(-1 * var(--axis)); top: -7px; font-size: 9.5px; font-style: normal; color: var(--text-3); white-space: nowrap; }
+.rain-chart .now { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--text-2); }
 .rain-chart .end-dot { position: absolute; width: 9px; height: 9px; margin: -4.5px; border-radius: 50%; background: var(--wet); }
 .rain-chart .end-label { position: absolute; margin: -22px -4px 0 0; font-size: 11px; font-weight: 700; color: var(--wet); white-space: nowrap; }
 .legend .sw.band { background: var(--normal); opacity: 0.25; border-radius: 2px; width: 14px; }
