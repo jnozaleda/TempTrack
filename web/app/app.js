@@ -642,6 +642,16 @@ function longTermCard(day) {
   const dot = (v, color) => v == null ? "" :
     `<span style="position:absolute;left:${(x(current.year) / W) * 100}%;top:${(y(v) / H) * 100}%;width:9px;height:9px;margin:-4.5px;border-radius:50%;background:${color}"></span>`;
 
+  // A line every 5° or 10° (numbered on the left) and one per decade (year underneath).
+  const tStep = [2, 5, 10].find((st) => (hi - lo) / st <= 4) ?? 20;
+  const pct = (v, total) => `${((v / total) * 100).toFixed(2)}%`;
+  let ltGrid = "";
+  for (let v = Math.ceil(lo / tStep) * tStep; v <= hi; v += tStep) ltGrid += `<span class="gl" style="top:${pct(y(v), H)}"><em>${v}°</em></span>`;
+  const decades = [];
+  for (let yr = Math.ceil(first / 10) * 10; yr <= last; yr += 10) decades.push(yr);
+  ltGrid += decades.map((yr) => `<span class="vl" style="left:${pct(x(yr), W)}"></span>`).join("");
+  const ltYears = decades.map((yr) => `<span style="left:${pct(x(yr), W)}">${yr}</span>`).join("");
+
   const avgIn = (f, from, to) => {
     const v = years.filter((r) => r.year >= from && r.year <= to && r[f] != null).map((r) => r[f]);
     return v.length >= 5 ? v.reduce((a, b) => a + b, 0) / v.length : null;
@@ -657,14 +667,15 @@ function longTermCard(day) {
   return `<section class="card longterm">
     <div class="card-head"><h2>${esc(t().since(BASELINE_START))}</h2><span>${esc(t().sameDay)}</span></div>
     ${compare}
-    <div style="position:relative">
+    <div class="lt-plot">
+      ${ltGrid}
       <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
         <polyline points="${line("max")}" fill="none" stroke="var(--much-hotter)" stroke-opacity="0.85" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
         <polyline points="${line("min")}" fill="none" stroke="var(--cooler)" stroke-opacity="0.85" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
       </svg>
       ${current ? dot(current.max, "var(--much-hotter)") + dot(current.min, "var(--cooler)") : ""}
     </div>
-    <div class="ends"><span>${first}</span><span>${esc(isToday() ? t().todayLower : String(current?.year ?? last))}</span></div>
+    <div class="lt-axis">${ltYears}</div>
     ${ok ? note(longTermNote(state.lang, hiTo - hiFrom, loTo - loFrom)) : ""}
   </section>`;
 }
